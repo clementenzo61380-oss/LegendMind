@@ -1,0 +1,67 @@
+[
+  {
+    "tag": "#LEGEND1",
+    "name": "LegendOne",
+    "trophies": 6200,
+    "league_type": 3,
+    "legend_tier": "legend_i",
+    "attacks_done": 5,
+    "trophies_gained": 160,
+    "trophies_lost": 96,
+    "discord_user_id": 100000000001,
+    "guild_id": 999000000001,
+    "note": "Joueur Legend I typique — 6200 trophées, 5/8 attaques aujourd'hui."
+  },
+  {
+    "tag": "#LEGEND2",
+    "name": "LegendTwo",
+    "trophies": 5720,
+    "league_type": 2,
+    "legend_tier": "legend_ii",
+    "attacks_done": 18,
+    "trophies_gained": 576,
+    "trophies_lost": 288,
+    "discord_user_id": 100000000002,
+    "guild_id": 999000000001,
+    "note": "Joueur Legend II — format hebdomadaire, 18/30 batailles."
+  },
+  {
+    "tag": "#LEGEND3",
+    "name": "LegendThree",
+    "trophies": 5060,
+    "league_type": 1,
+    "legend_tier": "legend_iii",
+    "attacks_done": 12,
+    "trophies_gained": 384,
+    "trophies_lost": 192,
+    "discord_user_id": 100000000003,
+    "guild_id": 999000000001,
+    "note": "Joueur Legend III à 60 trophées du seuil de relégation (5000)."
+  },
+  {
+    "tag": "#RELEGATE",
+    "name": "CloseToRelegation",
+    "trophies": 5020,
+    "league_type": 1,
+    "legend_tier": "legend_iii",
+    "attacks_done": 3,
+    "trophies_gained": 96,
+    "trophies_lost": 64,
+    "discord_user_id": 100000000004,
+    "guild_id": 999000000001,
+    "note": "Joueur Legend III à 20 trophées du seuil — relégation imminente."
+  },
+  {
+    "tag": "#PROMOTE",
+    "name": "CloseToPromotion",
+    "trophies": 5960,
+    "league_type": 2,
+    "legend_tier": "legend_ii",
+    "attacks_done": 7,
+    "trophies_gained": 224,
+    "trophies_lost": 160,
+    "discord_user_id": 100000000005,
+    "guild_id": 999000000001,
+    "note": "Joueur Legend II à 40 trophées de Legend I — promotion possible."
+  }
+]

@@ -1,0 +1,19 @@
+{
+  "version": "2026-05-01-post-patchnotes",
+  "notes": "Exemple — à héberger en HTTPS. Mettre à jour après lecture des notes Supercell.",
+  "legend_i_daily_battles": 8,
+  "legend_ii_weekly_battles": 30,
+  "legend_iii_weekly_battles": 24,
+  "legend_daily_reset_hour_utc": 5,
+  "legend_i_pace_warning_remaining": 4,
+  "legend_i_pace_critical_remaining": 2,
+  "poll_interval_legend_i_seconds": 180,
+  "poll_interval_legend_ii_iii_seconds": 1800,
+  "weekly_recap_day_of_week": 6,
+  "weekly_recap_hour_utc": 22,
+  "coc_legend_league_id": 29000022,
+  "legend_total_players_estimate": 250000,
+  "lower_legend_iii": 5000,
+  "lower_legend_ii": 5500,
+  "lower_legend_i": 6000
+}

@@ -1,0 +1,82 @@
+[
+  {
+    "player_tag": "#LEGEND1",
+    "trophies": 6150,
+    "league_type": 3,
+    "attacks_done": 3,
+    "trophies_gained": 96,
+    "trophies_lost": 64,
+    "captured_at": "2026-05-03T06:00:00+00:00",
+    "note": "Snapshot du matin — 3/8 attaques réalisées."
+  },
+  {
+    "player_tag": "#LEGEND1",
+    "trophies": 6200,
+    "league_type": 3,
+    "attacks_done": 5,
+    "trophies_gained": 160,
+    "trophies_lost": 96,
+    "captured_at": "2026-05-03T12:00:00+00:00",
+    "note": "Snapshot midi — net +50 trophées vs le matin."
+  },
+  {
+    "player_tag": "#LEGEND1",
+    "trophies": 6180,
+    "league_type": 3,
+    "attacks_done": 5,
+    "trophies_gained": 160,
+    "trophies_lost": 128,
+    "captured_at": "2026-05-03T18:00:00+00:00",
+    "note": "Snapshot soir — défense reçue, -20 trophées net vs midi."
+  },
+  {
+    "player_tag": "#LEGEND1",
+    "trophies": 6220,
+    "league_type": 3,
+    "attacks_done": 8,
+    "trophies_gained": 256,
+    "trophies_lost": 128,
+    "captured_at": "2026-05-03T22:00:00+00:00",
+    "note": "Fin de journée — quota 8/8 atteint, record du jour 6220."
+  },
+  {
+    "player_tag": "#LEGEND3",
+    "trophies": 5120,
+    "league_type": 1,
+    "attacks_done": 8,
+    "trophies_gained": 256,
+    "trophies_lost": 128,
+    "captured_at": "2026-04-28T22:00:00+00:00",
+    "note": "Snapshot semaine passée Legend III."
+  },
+  {
+    "player_tag": "#LEGEND3",
+    "trophies": 5060,
+    "league_type": 1,
+    "attacks_done": 12,
+    "trophies_gained": 384,
+    "trophies_lost": 192,
+    "captured_at": "2026-05-03T12:00:00+00:00",
+    "note": "Snapshot cette semaine — trend descendant -60 trophées sur 5 jours."
+  },
+  {
+    "player_tag": "#RELEGATE",
+    "trophies": 5050,
+    "league_type": 1,
+    "attacks_done": 0,
+    "trophies_gained": 0,
+    "trophies_lost": 32,
+    "captured_at": "2026-05-03T08:00:00+00:00",
+    "note": "Joueur sur le point d'être relégué — 50 trophées au-dessus du seuil."
+  },
+  {
+    "player_tag": "#RELEGATE",
+    "trophies": 5020,
+    "league_type": 1,
+    "attacks_done": 3,
+    "trophies_gained": 96,
+    "trophies_lost": 64,
+    "captured_at": "2026-05-03T14:00:00+00:00",
+    "note": "Après 3 attaques — toujours proche de la relégation."
+  }
+]
