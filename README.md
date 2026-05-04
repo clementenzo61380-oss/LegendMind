@@ -86,3 +86,4 @@ Si ton dépôt **n’est que** le dossier du bot, copie ce YAML à la racine : `
 | `/saison` | Saison active & dernier classement figé |
 | `/saison_historique` | Saisons terminées récentes |
 | `/admin_saison_cloturer` | Clôturer la saison (administrateur) |
+# LegendMind
