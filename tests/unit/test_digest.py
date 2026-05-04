@@ -1,4 +1,5 @@
 """Unit tests for ``DailyDigestService`` (no Discord HTTP)."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -9,6 +10,8 @@ import pytest
 from constants import LeagueType
 from models import LegendSnapshot
 from services.digest import DailyDigestService
+
+
 class _FakeRank:
     """Minimal stub — digest only needs an object with ``curve`` etc."""
 
@@ -29,7 +32,9 @@ class _FakeRepoEmpty:
         return None
 
     async def get_snapshots_since(
-        self, _tag: str, _since: datetime,
+        self,
+        _tag: str,
+        _since: datetime,
     ) -> list[LegendSnapshot]:
         return []
 
@@ -62,7 +67,9 @@ class _FakeRepoUnknownTier:
         )
 
     async def get_snapshots_since(
-        self, _tag: str, _since: datetime,
+        self,
+        _tag: str,
+        _since: datetime,
     ) -> list[LegendSnapshot]:
         return []
 

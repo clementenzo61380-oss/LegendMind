@@ -7,6 +7,7 @@ Tests the full polling cycle end-to-end with injected fakes, verifying:
 - Backoff and retry behaviour on transient CoC API errors.
 - Per-tier queue routing (Legend I → fast queue, II/III → slow queue).
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -107,6 +108,7 @@ async def test_snapshot_saved_when_state_changes() -> None:
 
     # Directly call _process_task bypassing the queue loop.
     from cogs.tracker import _PollTask
+
     await poller._process_task(_PollTask(target=_make_poll_target("#TESTCHANGE")))
 
     repo.save_snapshot.assert_awaited_once()
@@ -135,10 +137,14 @@ async def test_snapshot_not_saved_when_unchanged() -> None:
 
     bot = MagicMock()
     poller = LegendPoller(
-        bot=bot, coc_client=coc_client, repository=repo,
-        poll_interval_seconds=180, queue_max=100,
+        bot=bot,
+        coc_client=coc_client,
+        repository=repo,
+        poll_interval_seconds=180,
+        queue_max=100,
     )
     received: list[AttackDelta] = []
+
     async def _collect_sync(d: AttackDelta) -> None:
         received.append(d)
 
@@ -165,8 +171,11 @@ async def test_first_snapshot_saved_no_delta_fired() -> None:
 
     bot = MagicMock()
     poller = LegendPoller(
-        bot=bot, coc_client=coc_client, repository=repo,
-        poll_interval_seconds=180, queue_max=100,
+        bot=bot,
+        coc_client=coc_client,
+        repository=repo,
+        poll_interval_seconds=180,
+        queue_max=100,
     )
     fired: list[AttackDelta] = []
 
@@ -210,13 +219,17 @@ async def test_backoff_retries_on_429() -> None:
 
     bot = MagicMock()
     poller = LegendPoller(
-        bot=bot, coc_client=coc_client, repository=repo,
-        poll_interval_seconds=180, queue_max=100,
+        bot=bot,
+        coc_client=coc_client,
+        repository=repo,
+        poll_interval_seconds=180,
+        queue_max=100,
     )
 
     # Patch asyncio.sleep to avoid actually waiting during tests.
     with patch("cogs.tracker.asyncio.sleep", new_callable=AsyncMock):
         from cogs.tracker import _PollTask
+
         await poller._process_task(_PollTask(target=_make_poll_target()))
 
     assert call_count == 3
@@ -232,8 +245,11 @@ async def test_legend_i_target_goes_to_fast_queue() -> None:
     bot = MagicMock()
     coc_client = MagicMock()
     poller = LegendPoller(
-        bot=bot, coc_client=coc_client, repository=repo,
-        poll_interval_seconds=180, queue_max=100,
+        bot=bot,
+        coc_client=coc_client,
+        repository=repo,
+        poll_interval_seconds=180,
+        queue_max=100,
     )
 
     t = _make_poll_target("#L1", tier=LeagueType.LEGEND_I)
@@ -252,8 +268,11 @@ async def test_legend_iii_target_goes_to_slow_queue() -> None:
     bot = MagicMock()
     coc_client = MagicMock()
     poller = LegendPoller(
-        bot=bot, coc_client=coc_client, repository=repo,
-        poll_interval_seconds=180, queue_max=100,
+        bot=bot,
+        coc_client=coc_client,
+        repository=repo,
+        poll_interval_seconds=180,
+        queue_max=100,
     )
 
     t = _make_poll_target("#L3", tier=LeagueType.LEGEND_III)
@@ -279,8 +298,11 @@ async def test_subscriber_exception_does_not_kill_pipeline() -> None:
 
     bot = MagicMock()
     poller = LegendPoller(
-        bot=bot, coc_client=coc_client, repository=repo,
-        poll_interval_seconds=180, queue_max=100,
+        bot=bot,
+        coc_client=coc_client,
+        repository=repo,
+        poll_interval_seconds=180,
+        queue_max=100,
     )
 
     second_called = False

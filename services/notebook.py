@@ -5,6 +5,7 @@ calls into pure logic for scoring. Pattern detection is local
 heuristics (clustering, opponent-strength distribution, multi-attack
 correlation) — kept simple and explainable, not ML.
 """
+
 from __future__ import annotations
 
 import logging
@@ -87,9 +88,7 @@ class ErrorNotebookService:
 
         avg = round(mean(d.malchance_score for d in defenses), 3)
         bad_luck_loss = sum(
-            d.trophies_lost
-            for d in defenses
-            if d.malchance_score >= MALCHANCE_HIGH_THRESHOLD
+            d.trophies_lost for d in defenses if d.malchance_score >= MALCHANCE_HIGH_THRESHOLD
         )
         patterns = self._detect_patterns(defenses)
         recommendations = self._build_recommendations(defenses, patterns)
@@ -106,7 +105,9 @@ class ErrorNotebookService:
         )
 
     async def get_malchance_trend(
-        self, player_tag: str, days: int = 7,
+        self,
+        player_tag: str,
+        days: int = 7,
     ) -> list[float]:
         """Daily averages of malchance score over the last `days` UTC days.
 
@@ -146,8 +147,7 @@ class ErrorNotebookService:
         if hour_window is not None:
             start_h, end_h, share = hour_window
             out.append(
-                f"⏰ {int(share * 100)}% de tes défenses entre "
-                f"{start_h:02d}h et {end_h:02d}h UTC."
+                f"⏰ {int(share * 100)}% de tes défenses entre {start_h:02d}h et {end_h:02d}h UTC."
             )
 
         weak_opponents = sum(
@@ -157,20 +157,17 @@ class ErrorNotebookService:
             and d.opponent_trophies < MALCHANCE_OPPONENT_GAP_TOLERANCE * 30
         )
         if weak_opponents and weak_opponents / len(defenses) >= 0.4:
-            out.append(
-                "⚖️ Tu reçois souvent des attaques d'adversaires moins gradés."
-            )
+            out.append("⚖️ Tu reçois souvent des attaques d'adversaires moins gradés.")
 
         pile_on = sum(1 for d in defenses if d.attack_count >= 2)
         if pile_on / len(defenses) >= 0.30:
-            out.append(
-                "🔁 Plusieurs défenses subissent des attaques multiples."
-            )
+            out.append("🔁 Plusieurs défenses subissent des attaques multiples.")
 
         return out
 
     def _dominant_hour_window(
-        self, defenses: list[DefenseLog],
+        self,
+        defenses: list[DefenseLog],
     ) -> tuple[int, int, float] | None:
         """Return (start_h, end_h_exclusive, share) if a 4h window holds ≥40%.
 
@@ -180,23 +177,22 @@ class ErrorNotebookService:
         total = len(defenses)
         best: tuple[int, int, float] | None = None
         for start_h in range(24):
-            count = sum(
-                hour_counts[(start_h + offset) % 24] for offset in range(4)
-            )
+            count = sum(hour_counts[(start_h + offset) % 24] for offset in range(4))
             share = count / total
             if share >= 0.40 and (best is None or share > best[2]):
                 best = (start_h, (start_h + 4) % 24, round(share, 2))
         return best
 
     def _build_recommendations(
-        self, defenses: list[DefenseLog], patterns: list[str],
+        self,
+        defenses: list[DefenseLog],
+        patterns: list[str],
     ) -> list[str]:
         """At most 3 actionable recommendations, prioritised by signal strength."""
         recs: list[str] = []
         if any("vulnérabilité" in p or "défenses entre" in p for p in patterns):
             recs.append(
-                "Place ton bouclier ou attaque juste avant la fenêtre "
-                "horaire où tu perds le plus."
+                "Place ton bouclier ou attaque juste avant la fenêtre horaire où tu perds le plus."
             )
         avg_loss = mean(d.trophies_lost for d in defenses)
         if avg_loss > 35:

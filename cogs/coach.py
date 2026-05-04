@@ -35,6 +35,7 @@ from models import LegendSnapshot
 from services import coach_briefing as briefing
 from services.db import Repository
 from services.debug_ndjson import debug_ndjson
+from services.discord_interactions import defer_ephemeral_safe
 from services.logic import legend_consistency_score
 from services.rank_predictor import RankPredictor
 
@@ -69,16 +70,12 @@ class CoachCog(commands.Cog):
             message="command entry",
             data={"age_ms": int((datetime.now(timezone.utc) - interaction.created_at).total_seconds() * 1000)},
         )
-        try:
-            await interaction.response.defer(ephemeral=True)
-        except (discord.NotFound, discord.HTTPException) as exc:
-            # Interaction expired or connection flaked; nothing we can send back.
-            log.warning("cmd=/daily defer failed: %r", exc)
+        if not await defer_ephemeral_safe(interaction, log_label="cmd=/daily"):
             debug_ndjson(
                 hypothesis_id="LAT",
                 location="coach.py:/daily:defer_failed",
                 message="defer failed",
-                data={"exc": type(exc).__name__},
+                data={},
             )
             return
         log.info("cmd=/daily start uid=%s", interaction.user.id)
@@ -130,15 +127,12 @@ class CoachCog(commands.Cog):
             message="command entry",
             data={"age_ms": int((datetime.now(timezone.utc) - interaction.created_at).total_seconds() * 1000)},
         )
-        try:
-            await interaction.response.defer(ephemeral=True)
-        except (discord.NotFound, discord.HTTPException) as exc:
-            log.warning("cmd=/predict defer failed: %r", exc)
+        if not await defer_ephemeral_safe(interaction, log_label="cmd=/predict"):
             debug_ndjson(
                 hypothesis_id="LAT",
                 location="coach.py:/predict:defer_failed",
                 message="defer failed",
-                data={"exc": type(exc).__name__},
+                data={},
             )
             return
         log.info("cmd=/predict start uid=%s", interaction.user.id)
@@ -192,15 +186,12 @@ class CoachCog(commands.Cog):
             message="command entry",
             data={"age_ms": int((datetime.now(timezone.utc) - interaction.created_at).total_seconds() * 1000)},
         )
-        try:
-            await interaction.response.defer(ephemeral=True)
-        except (discord.NotFound, discord.HTTPException) as exc:
-            log.warning("cmd=/score defer failed: %r", exc)
+        if not await defer_ephemeral_safe(interaction, log_label="cmd=/score"):
             debug_ndjson(
                 hypothesis_id="LAT",
                 location="coach.py:/score:defer_failed",
                 message="defer failed",
-                data={"exc": type(exc).__name__},
+                data={},
             )
             return
         log.info("cmd=/score start uid=%s", interaction.user.id)

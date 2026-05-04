@@ -22,6 +22,7 @@ All state lives in memory; no DB writes. `RankPredictor` is a long-lived
 singleton injected into the bot at startup and refreshed via an asyncio task
 every `RANK_CACHE_TTL_SECONDS`.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -51,6 +52,7 @@ log = logging.getLogger(__name__)
 @dataclass(frozen=True, slots=True)
 class RankDataPoint:
     """One entry from the global Legend leaderboard."""
+
     rank: int
     trophies: int
     player_tag: str
@@ -66,11 +68,12 @@ class RankCurve:
 
     The inversion gives: rank = exp((a - trophies) / b).
     """
+
     a: float
     b: float
     r_squared: float
-    min_trophies: int     # minimum trophies seen in the sample
-    max_trophies: int     # maximum trophies seen in the sample
+    min_trophies: int  # minimum trophies seen in the sample
+    max_trophies: int  # maximum trophies seen in the sample
     sample_size: int
     built_at: datetime = field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -99,6 +102,7 @@ class RankCurve:
 @dataclass(slots=True)
 class LeaderboardSnapshot:
     """Cached result of one leaderboard fetch cycle."""
+
     points: list[RankDataPoint]
     curve: RankCurve | None
     fetched_at: datetime
@@ -130,7 +134,8 @@ class RankPredictor:
         """Launch the background refresh coroutine.  Call once at bot startup."""
         if self._refresh_task is None or self._refresh_task.done():
             self._refresh_task = asyncio.create_task(
-                self._refresh_loop(), name="rank-predictor-refresh",
+                self._refresh_loop(),
+                name="rank-predictor-refresh",
             )
 
     def stop(self) -> None:
@@ -174,7 +179,9 @@ class RankPredictor:
 
         curve = _fit_curve(points)
         self._snapshot = LeaderboardSnapshot(
-            points=points, curve=curve, fetched_at=datetime.now(timezone.utc),
+            points=points,
+            curve=curve,
+            fetched_at=datetime.now(timezone.utc),
         )
         log.info(
             "Rank curve rebuilt: %d points, r²=%.3f, range [%d..%d] trophies",
@@ -210,7 +217,9 @@ class RankPredictor:
         if not snapshots or league == LeagueType.UNKNOWN:
             return None
         projected_trophies = predict_end_of_season_trophies(
-            snapshots, league, season_end=season_end,
+            snapshots,
+            league,
+            season_end=season_end,
         )
         if projected_trophies <= 0:
             return None
@@ -227,9 +236,7 @@ class RankPredictor:
         """Seconds since last successful leaderboard fetch, or ∞ if never."""
         if self._snapshot is None:
             return float("inf")
-        return (
-            datetime.now(timezone.utc) - self._snapshot.fetched_at
-        ).total_seconds() / 60.0
+        return (datetime.now(timezone.utc) - self._snapshot.fetched_at).total_seconds() / 60.0
 
     @property
     def top_entry(self) -> RankDataPoint | None:
@@ -256,8 +263,8 @@ def _fit_curve(points: list[RankDataPoint]) -> RankCurve | None:
     if n < 2:
         return None
 
-    xs = [math.log(max(1, p.rank)) for p in points]   # ln(rank)
-    ys = [float(p.trophies) for p in points]            # trophies
+    xs = [math.log(max(1, p.rank)) for p in points]  # ln(rank)
+    ys = [float(p.trophies) for p in points]  # trophies
 
     mean_x = sum(xs) / n
     mean_y = sum(ys) / n
@@ -269,7 +276,7 @@ def _fit_curve(points: list[RankDataPoint]) -> RankCurve | None:
     if ss_xx == 0:
         return None
 
-    b = ss_xy / ss_xx   # slope (should be negative: more rank = fewer trophies)
+    b = ss_xy / ss_xx  # slope (should be negative: more rank = fewer trophies)
     a = mean_y - b * mean_x
 
     # R-squared

@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY . .
 
-RUN mkdir -p /app/logs \
+RUN mkdir -p /app/logs /app/data \
     && useradd -m -u 1000 legendmind \
     && chown -R legendmind:legendmind /app
 USER legendmind

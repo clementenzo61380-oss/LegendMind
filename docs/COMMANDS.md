@@ -31,7 +31,7 @@ trophées). Le bot traite chaque tier différemment :
 
 | Commande | Free | Premium / Trial | Description |
 |----------|------|-----------------|-------------|
-| `/setup tag:#TAG` | ✅ | ✅ | Lie un compte Legend (vérifie `league.id == 29000022`). Active l'essai 7 j si pas déjà consommé. **Demande ensuite ton tier (Legend I/II/III)** via Select. |
+| `/setup tag:#TAG` | ✅ | ✅ | Lie un compte Legend (vérifie l’id ligue Légende, ex. `105000036`). Active l'essai 7 j si pas déjà consommé. **Demande ensuite ton tier (Legend I/II/III)** via Select. |
 | `/tier [tag:#TAG]` | ✅ | ✅ | Met à jour le tier déclaré pour un compte (Legend I → II → III). |
 | `/premium` | ✅ | ✅ | Active l'essai 7 j si non consommé, sinon ouvre Stripe Checkout. |
 | `/accounts` | ✅ (1 max) | ✅ (3 max) | Liste les comptes liés + tier + boutons ✖ pour retirer. |

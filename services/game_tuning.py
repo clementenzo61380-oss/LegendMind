@@ -13,6 +13,7 @@ supporté ici :
 Les clés non reconnues sont ignorées (log DEBUG). Les valeurs hors bornes
 sont rejetées (log WARNING).
 """
+
 from __future__ import annotations
 
 import logging
@@ -22,6 +23,7 @@ from typing import Any, Final, Mapping
 
 from constants import (
     COC_LEGEND_LEAGUE_ID,
+    LEAGUE_LOWER_BOUND,
     LEGEND_DAILY_RESET_HOUR_UTC,
     LEGEND_I_DAILY_BATTLES,
     LEGEND_I_PACE_CRITICAL_REMAINING,
@@ -29,7 +31,6 @@ from constants import (
     LEGEND_II_WEEKLY_BATTLES,
     LEGEND_III_WEEKLY_BATTLES,
     LEGEND_TOTAL_PLAYERS_ESTIMATE,
-    LEAGUE_LOWER_BOUND,
     POLL_INTERVAL_LEGEND_I_SECONDS,
     POLL_INTERVAL_LEGEND_II_III_SECONDS,
     WEEKLY_RECAP_DAY_OF_WEEK,
@@ -49,7 +50,9 @@ _NUMERIC_PATCH_FIELDS: Final[dict[str, tuple[str, int, int]]] = {
     "legend_i_pace_critical_remaining": ("legend_i_pace_critical_remaining", 1, 16),
     "poll_interval_legend_i_seconds": ("poll_interval_legend_i_seconds", 60, 3600),
     "poll_interval_legend_ii_iii_seconds": (
-        "poll_interval_legend_ii_iii_seconds", 120, 7200,
+        "poll_interval_legend_ii_iii_seconds",
+        120,
+        7200,
     ),
     "weekly_recap_day_of_week": ("weekly_recap_day_of_week", 0, 6),
     "weekly_recap_hour_utc": ("weekly_recap_hour_utc", 0, 23),
@@ -152,7 +155,8 @@ def apply_tuning_patch(raw: Mapping[str, Any]) -> tuple[bool, str]:
         if coerced is None:
             log.warning(
                 "game_tuning: valeur invalide ou hors bornes pour %s (%r)",
-                json_key, raw[json_key],
+                json_key,
+                raw[json_key],
             )
             continue
         updates[field] = coerced

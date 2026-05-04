@@ -19,8 +19,10 @@ L'envoi est :
   * gated par ``UserPreferences.alert_on_defense`` (même opt-in que
     /ping pour Legend I, comportement cohérent).
 """
+
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -41,6 +43,7 @@ _RECAP_ALERT_KEY = "weekly_recap"
 @dataclass(frozen=True, slots=True)
 class _RecapDigest:
     """Aggregated week stats for a single tag."""
+
     player_tag: str
     discord_user_id: int
     name: str | None
@@ -111,7 +114,8 @@ class WeeklyRecapService:
         since = now - lookback
         sent = 0
         candidates = await self._repo.list_active_legend_players_in_tier(
-            LeagueType.LEGEND_II, LeagueType.LEGEND_III,
+            LeagueType.LEGEND_II,
+            LeagueType.LEGEND_III,
         )
         for tag, discord_user_id, name, tier in candidates:
             prefs = await self._repo.get_preferences(discord_user_id)
@@ -131,11 +135,17 @@ class WeeklyRecapService:
             )
             if await self._send(digest):
                 sent += 1
+                # Throttle DM sending to avoid Discord rate limits.
+                # 5 DM/s is Discord's per-bot global DM limit; 0.25s between
+                # sends gives comfortable headroom.
+                await asyncio.sleep(0.25)
         return sent
 
     # ── internals ────────────────────────────────────────────────────────
     async def _already_sent_this_week(
-        self, tag: str, now: datetime,
+        self,
+        tag: str,
+        now: datetime,
     ) -> bool:
         """True when a recap was already dispatched in the past 6 days."""
         last_at = await self._repo.get_last_alert_at(tag, _RECAP_ALERT_KEY)
@@ -144,16 +154,15 @@ class WeeklyRecapService:
         return (now - last_at) < timedelta(days=6)
 
     async def _send(self, digest: _RecapDigest) -> bool:
-        user: discord.User | discord.Member | None = (
-            self._bot.get_user(digest.discord_user_id)
-        )
+        user: discord.User | discord.Member | None = self._bot.get_user(digest.discord_user_id)
         if user is None:
             try:
                 user = await self._bot.fetch_user(digest.discord_user_id)
             except (discord.NotFound, discord.HTTPException):
                 log.info(
                     "Recap target user %d not reachable (tag %s)",
-                    digest.discord_user_id, digest.player_tag,
+                    digest.discord_user_id,
+                    digest.player_tag,
                 )
                 return False
         embed = _build_embed(digest)
@@ -162,16 +171,19 @@ class WeeklyRecapService:
         except discord.Forbidden:
             log.info(
                 "Recap DM blocked for user %d (tag %s)",
-                digest.discord_user_id, digest.player_tag,
+                digest.discord_user_id,
+                digest.player_tag,
             )
             return False
         except discord.HTTPException:
             log.exception(
-                "Failed to DM weekly recap to %d", digest.discord_user_id,
+                "Failed to DM weekly recap to %d",
+                digest.discord_user_id,
             )
             return False
         await self._repo.record_alert(
-            digest.player_tag, _RECAP_ALERT_KEY,
+            digest.player_tag,
+            _RECAP_ALERT_KEY,
             digest.discord_user_id,
             f"Recap envoyé : Δ={digest.trophies_delta:+d} trophies, "
             f"{digest.attacks_done}/{digest.quota} batailles",
@@ -197,9 +209,7 @@ def _build_embed(digest: _RecapDigest) -> discord.Embed:
     )
     embed.add_field(
         name="🏆 Trophies",
-        value=(
-            f"{digest.last.trophies}\n{delta_emoji} **{delta:+d}** sur la semaine"
-        ),
+        value=(f"{digest.last.trophies}\n{delta_emoji} **{delta:+d}** sur la semaine"),
         inline=True,
     )
     embed.add_field(
@@ -209,9 +219,7 @@ def _build_embed(digest: _RecapDigest) -> discord.Embed:
     )
     embed.add_field(
         name="📈 Bilan trophies",
-        value=(
-            f"+{digest.trophies_won} gagnés / -{digest.trophies_lost} perdus"
-        ),
+        value=(f"+{digest.trophies_won} gagnés / -{digest.trophies_lost} perdus"),
         inline=False,
     )
     if digest.attacks_done < digest.quota:

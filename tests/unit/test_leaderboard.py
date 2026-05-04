@@ -1,4 +1,5 @@
 """Unit tests `LeaderboardService` (cache + MVP) sans BDD."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -17,7 +18,9 @@ class _RepoStub:
         self.calls = 0
 
     async def list_guild_leaderboard(
-        self, _guild_id: int, **kwargs: Any,
+        self,
+        _guild_id: int,
+        **kwargs: Any,
     ) -> list[LeaderboardEntry]:
         self.calls += 1
         return list(self._rows)
@@ -27,8 +30,13 @@ class _RepoStub:
 async def test_leaderboard_cache_hits_after_first_call() -> None:
     rows = [
         LeaderboardEntry(
-            rank=1, player_tag="#A", display_name="A", discord_user_id=1,
-            trophies=5800, league_type=LeagueType.LEGEND_II, weekly_gain=120,
+            rank=1,
+            player_tag="#A",
+            display_name="A",
+            discord_user_id=1,
+            trophies=5800,
+            league_type=LeagueType.LEGEND_II,
+            weekly_gain=120,
         ),
     ]
     repo = _RepoStub(rows)
@@ -43,8 +51,13 @@ async def test_leaderboard_cache_hits_after_first_call() -> None:
 async def test_leaderboard_invalidate_guild() -> None:
     rows = [
         LeaderboardEntry(
-            rank=1, player_tag="#A", display_name="A", discord_user_id=1,
-            trophies=5800, league_type=LeagueType.LEGEND_II, weekly_gain=120,
+            rank=1,
+            player_tag="#A",
+            display_name="A",
+            discord_user_id=1,
+            trophies=5800,
+            league_type=LeagueType.LEGEND_II,
+            weekly_gain=120,
         ),
     ]
     repo = _RepoStub(rows)
@@ -59,12 +72,22 @@ async def test_leaderboard_invalidate_guild() -> None:
 async def test_mvp_picks_max_weekly_gain() -> None:
     rows = [
         LeaderboardEntry(
-            rank=1, player_tag="#A", display_name="A", discord_user_id=1,
-            trophies=5800, league_type=LeagueType.LEGEND_II, weekly_gain=80,
+            rank=1,
+            player_tag="#A",
+            display_name="A",
+            discord_user_id=1,
+            trophies=5800,
+            league_type=LeagueType.LEGEND_II,
+            weekly_gain=80,
         ),
         LeaderboardEntry(
-            rank=2, player_tag="#B", display_name="B", discord_user_id=2,
-            trophies=5700, league_type=LeagueType.LEGEND_II, weekly_gain=200,
+            rank=2,
+            player_tag="#B",
+            display_name="B",
+            discord_user_id=2,
+            trophies=5700,
+            league_type=LeagueType.LEGEND_II,
+            weekly_gain=200,
         ),
     ]
     svc = LeaderboardService(_RepoStub(rows), InMemoryCache())  # type: ignore[arg-type]

@@ -53,6 +53,39 @@ La commande `/premium` et le serveur webhook sont simplement désactivés.
 
 ---
 
+## Tuning jeu (optionnel)
+
+| Variable | Req. | Défaut | Description |
+|---|---|---|---|
+| `GAME_TUNING_URL` | ❌ | — | URL **HTTPS** d’un JSON (voir `config/game_tuning.example.json`) pour surcharger quotas, **heure de reset UTC**, polling, etc. |
+| `GAME_TUNING_POLL_SECONDS` | ❌ | `86400` | Intervalle entre deux fetch du JSON. |
+
+Sans URL, le bot utilise `constants.py` (dont **`LEGEND_DAILY_RESET_HOUR_UTC`** par défaut **17** ≈ 19h Paris en **CEST**).
+
+---
+
+## Premium à vie (optionnel)
+
+| Variable | Req. | Défaut | Description |
+|---|---|---|---|
+| `LIFETIME_ENTITLED_DISCORD_IDS` | ❌ | — | IDs Discord (espaces ou virgules) avec accès Premium permanent sur cette instance, sans Stripe. |
+
+---
+
+## Export Excel quotidien (Légende)
+
+| Variable | Req. | Défaut | Description |
+|---|---|---|---|
+| `DAILY_LEGEND_EXPORT_ENABLED` | ❌ | `false` | `true` pour activer l’export après chaque journée de reset. |
+| `DAILY_LEGEND_EXPORT_MINUTE_AFTER_RESET` | ❌ | `5` | Minute UTC à laquelle lancer l’export (ex. reset **17h** UTC + **5** → **17:05**). |
+| `DAILY_LEGEND_EXPORT_XLSX_PATH` | ❌ | `data/daily_legend_stats.xlsx` | Chemin du fichier `.xlsx`. |
+| `DAILY_LEGEND_EXPORT_STATE_PATH` | ❌ | `data/.daily_legend_export_last` | Fichier d’état pour éviter les doublons. |
+| `DAILY_LEGEND_EXPORT_DISCORD_CHANNEL_ID` | ❌ | — | ID salon texte pour poster le fichier ; vide = **fichier seulement**. |
+
+Avec **Docker Compose**, le dossier `./data` est monté sur `/app/data` pour conserver le fichier entre redémarrages.
+
+---
+
 ## Valeurs recommandées par environnement
 
 | Variable | dev | staging | prod |
@@ -85,7 +118,7 @@ PYTHONPATH=. python scripts/migrate.py --dry-run
 ## Docker
 
 `docker-compose.yml` surcharge `DATABASE_URL` pour pointer vers le conteneur
-`postgres` interne. Les autres variables sont lues depuis `.env` via `env_file`.
+`postgres` interne. Les volumes **`./logs`** et **`./data`** sont montés (`logs` + export Excel / état). Les autres variables sont lues depuis `.env` via `env_file`.
 Le bot attend que Postgres soit `healthy` (healthcheck `pg_isready`) avant de démarrer.
 
 ```bash

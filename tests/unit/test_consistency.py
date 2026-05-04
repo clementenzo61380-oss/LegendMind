@@ -1,4 +1,5 @@
 """Tests for the Legend Consistency Score and optimal-attack-hour heuristics."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -76,7 +77,7 @@ def test_optimal_hour_ignores_reset_boundary() -> None:
     snaps = [
         _snap(base, 8),
         _snap(base + timedelta(minutes=10), 0),  # reset → drop
-        _snap(base + timedelta(hours=2), 1),     # 1 actual attack at ~07h
+        _snap(base + timedelta(hours=2), 1),  # 1 actual attack at ~07h
     ]
     # Only 1 attack observed → below the 3-min threshold, returns None.
     assert optimal_attack_hour(snaps, lookback_days=2) is None

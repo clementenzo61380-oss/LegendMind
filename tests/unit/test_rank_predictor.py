@@ -9,6 +9,7 @@ Covers:
 
 The CoC API client is stubbed via `unittest.mock` — no real network.
 """
+
 from __future__ import annotations
 
 import math
@@ -57,10 +58,7 @@ def test_fit_curve_realistic_supercell_top_200() -> None:
     """Real-world Legend leaderboard has R² typically in [0.85, 0.99]."""
     # Mimic a typical top-200 distribution: rank 1 at ~7400, rank 200 at ~5800.
     # Trophies decrease roughly logarithmically with rank.
-    pairs = [
-        (r, int(7400 - (7400 - 5800) * math.log(r) / math.log(200)))
-        for r in range(1, 201)
-    ]
+    pairs = [(r, int(7400 - (7400 - 5800) * math.log(r) / math.log(200))) for r in range(1, 201)]
     curve = _fit_curve(_make_points(pairs))
     assert curve is not None
     assert curve.r_squared > 0.95
@@ -118,8 +116,12 @@ def test_estimate_rank_returns_none_when_fit_quality_too_low() -> None:
 def test_estimate_rank_returns_none_when_b_is_zero() -> None:
     """Pathological flat curve (no slope) → cannot invert."""
     curve = RankCurve(
-        a=6500.0, b=0.0, r_squared=0.99,
-        min_trophies=6000, max_trophies=7000, sample_size=10,
+        a=6500.0,
+        b=0.0,
+        r_squared=0.99,
+        min_trophies=6000,
+        max_trophies=7000,
+        sample_size=10,
     )
     assert curve.estimate_rank(6500) is None
 
@@ -147,8 +149,7 @@ def _fake_coc_client_with_leaderboard(
 async def test_refresh_populates_snapshot_and_curve() -> None:
     pairs = [(r, int(round(7000 - 200 * math.log(r)))) for r in range(1, 201)]
     entries = [
-        _FakeLeaderboardEntry(rank=r, trophies=t, tag=f"#T{r}", name=f"P{r}")
-        for r, t in pairs
+        _FakeLeaderboardEntry(rank=r, trophies=t, tag=f"#T{r}", name=f"P{r}") for r, t in pairs
     ]
     coc_client = _fake_coc_client_with_leaderboard(entries)
     predictor = RankPredictor(coc_client=coc_client, ttl_seconds=600)
@@ -195,8 +196,7 @@ async def test_estimate_current_rank_returns_none_without_data() -> None:
 async def test_estimate_current_rank_uses_curve_after_refresh() -> None:
     pairs = [(r, int(round(7000 - 200 * math.log(r)))) for r in range(1, 201)]
     entries = [
-        _FakeLeaderboardEntry(rank=r, trophies=t, tag=f"#T{r}", name=f"P{r}")
-        for r, t in pairs
+        _FakeLeaderboardEntry(rank=r, trophies=t, tag=f"#T{r}", name=f"P{r}") for r, t in pairs
     ]
     predictor = RankPredictor(
         coc_client=_fake_coc_client_with_leaderboard(entries),
@@ -239,7 +239,8 @@ async def test_predict_season_end_rank_returns_none_without_snapshots() -> None:
     coc_client = MagicMock()
     predictor = RankPredictor(coc_client=coc_client, ttl_seconds=600)
     result = predictor.predict_season_end_rank(
-        snapshots=[], league=LeagueType.LEGEND_I,
+        snapshots=[],
+        league=LeagueType.LEGEND_I,
     )
     assert result is None
 
@@ -249,8 +250,7 @@ async def test_predict_season_end_rank_uses_pace_then_curve() -> None:
     """Full pipeline: pace projection → curve inversion → rank int."""
     pairs = [(r, int(round(7000 - 200 * math.log(r)))) for r in range(1, 201)]
     entries = [
-        _FakeLeaderboardEntry(rank=r, trophies=t, tag=f"#T{r}", name=f"P{r}")
-        for r, t in pairs
+        _FakeLeaderboardEntry(rank=r, trophies=t, tag=f"#T{r}", name=f"P{r}") for r, t in pairs
     ]
     predictor = RankPredictor(
         coc_client=_fake_coc_client_with_leaderboard(entries),
@@ -265,7 +265,9 @@ async def test_predict_season_end_rank_uses_pace_then_curve() -> None:
     ]
     season_end = base + timedelta(days=5)
     result = predictor.predict_season_end_rank(
-        snapshots=snapshots, league=LeagueType.LEGEND_I, season_end=season_end,
+        snapshots=snapshots,
+        league=LeagueType.LEGEND_I,
+        season_end=season_end,
     )
     assert result is not None
     assert 1 <= result <= LEGEND_TOTAL_PLAYERS_ESTIMATE

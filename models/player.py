@@ -4,6 +4,7 @@ These objects are the contracts shared between services (db ↔ logic ↔
 tracker ↔ alerts ↔ notebook). Keep them dependency-free so they can be
 imported from anywhere without circular trouble.
 """
+
 from __future__ import annotations
 
 import enum
@@ -22,6 +23,7 @@ class LegendSnapshot:
 
     Immutable so it can be safely shared across coroutines without locking.
     """
+
     player_tag: str
     trophies: int
     league_type: LeagueType
@@ -38,15 +40,14 @@ class AttackDelta:
     Always derived from `LegendSnapshot` pairs — never mutated directly.
     `new_attacks` and `net_trophies` are precomputed for hot-path use.
     """
+
     previous: LegendSnapshot
     current: LegendSnapshot
     new_attacks: int
     net_trophies: int
 
     @classmethod
-    def between(
-        cls, previous: LegendSnapshot, current: LegendSnapshot
-    ) -> "AttackDelta":
+    def between(cls, previous: LegendSnapshot, current: LegendSnapshot) -> "AttackDelta":
         """Compute the delta between two snapshots of the same player."""
         if previous.player_tag != current.player_tag:
             raise ValueError(
@@ -71,6 +72,7 @@ class DefenseData:
     Used as input to the malchance scorer; not persisted directly
     (the persisted form is `DefenseLog`).
     """
+
     trophies_lost: int
     opponent_tag: str | None
     opponent_trophies: int | None
@@ -80,6 +82,7 @@ class DefenseData:
 @dataclass(frozen=True, slots=True)
 class DefenseLog:
     """A persisted defense event with its computed malchance score."""
+
     id: int
     player_tag: str
     trophies_lost: int
@@ -101,6 +104,7 @@ class PlayerGoal:
 
     Mutable: editable via Discord modal without rebuilding the object.
     """
+
     player_tag: str
     target_trophies: int
     target_attacks_per_day: int
@@ -110,6 +114,7 @@ class PlayerGoal:
 @dataclass(slots=True)
 class UserPreferences:
     """Per-Discord-user preferences governing alert + notebook behavior."""
+
     discord_user_id: int
     enable_error_notebook: bool = False
     enable_alerts: bool = True
@@ -133,6 +138,7 @@ class PollTarget:
     Carries ``legend_tier`` (Avril 2026 Ranked refonte) so the tracker can
     route Legend I to the fast queue and Legend II/III to the slow queue.
     """
+
     player_tag: str
     discord_user_id: int
     guild_id: int | None
@@ -146,6 +152,7 @@ class PollTarget:
 @dataclass(slots=True)
 class GuildConfig:
     """Per-Discord-guild settings (see prompt étape 6)."""
+
     guild_id: int
     leaderboard_limit: int = 15
     leaderboard_public: bool = True
@@ -164,6 +171,7 @@ class GuildConfig:
 @dataclass(frozen=True, slots=True)
 class SeasonRecord:
     """One Legend season window (typically monthly)."""
+
     id: int
     label: str
     period_start: datetime
@@ -173,6 +181,7 @@ class SeasonRecord:
 @dataclass(frozen=True, slots=True)
 class SeasonHistoryEntry:
     """Ligne pour `/historique` — résultats passés d’un joueur."""
+
     season_label: str
     period_end: datetime | None
     final_trophies: int
@@ -184,6 +193,7 @@ class SeasonHistoryEntry:
 @dataclass(frozen=True, slots=True)
 class SeasonResultRow:
     """Frozen ranking snapshot at season close for one player."""
+
     season_id: int
     guild_id: int
     player_tag: str
@@ -196,6 +206,7 @@ class SeasonResultRow:
 @dataclass(frozen=True, slots=True)
 class MetricsHourlyRow:
     """One hour bucket of aggregated deltas."""
+
     player_tag: str
     bucket_start: datetime
     net_trophies_delta: int
@@ -206,6 +217,7 @@ class MetricsHourlyRow:
 @dataclass(frozen=True, slots=True)
 class LeaderboardEntry:
     """One row for `/classement` / LeaderboardService."""
+
     rank: int
     player_tag: str
     display_name: str | None
@@ -225,6 +237,7 @@ class SubscriptionPlan(str, enum.Enum):
     The ``str`` mixin makes the value safe to persist directly to PostgreSQL
     without an extra cast.
     """
+
     FREE = "free"
     TRIAL = "trial"
     PREMIUM = "premium"
@@ -237,6 +250,7 @@ class SubscriptionStatus(str, enum.Enum):
     UI / quota service actually need. Anything not ``ACTIVE``/``TRIALING``
     is non-entitling once ``current_period_end`` has passed.
     """
+
     INACTIVE = "inactive"
     TRIALING = "trialing"
     ACTIVE = "active"
@@ -251,6 +265,7 @@ class Subscription:
     Mutable on purpose — a single instance is loaded, updated by webhooks,
     and re-persisted via ``Repository.upsert_subscription``.
     """
+
     discord_user_id: int
     plan: SubscriptionPlan = SubscriptionPlan.FREE
     status: SubscriptionStatus = SubscriptionStatus.INACTIVE
@@ -276,6 +291,7 @@ class Subscription:
 @dataclass(slots=True)
 class PingQuotaState:
     """Snapshot of one (user, calendar month) row in ``ping_quota``."""
+
     discord_user_id: int
     year_month: str  # 'YYYY-MM' (UTC)
     used: int = 0
@@ -285,6 +301,7 @@ class PingQuotaState:
 @dataclass(frozen=True, slots=True)
 class NotebookReport:
     """Aggregate output of the weekly Carnet d'Erreurs analysis."""
+
     player_tag: str
     week_start: date
     week_end: date

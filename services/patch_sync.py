@@ -1,4 +1,5 @@
 """Synchronisation périodique du tuning jeu depuis une URL JSON (dérivée des patch notes)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -49,7 +50,8 @@ class PatchNotesSyncService:
         await self._bot.wait_until_ready()
         log.info(
             "patch_sync: boucle démarrée (intervalle %ds, url=%s)",
-            self._poll_interval, self._url[:80] + ("…" if len(self._url) > 80 else ""),
+            self._poll_interval,
+            self._url[:80] + ("…" if len(self._url) > 80 else ""),
         )
         while True:
             try:
@@ -88,7 +90,6 @@ class PatchNotesSyncService:
         new = get_tuning()
         if self._poller is not None and (
             new.poll_interval_legend_i_seconds != old.poll_interval_legend_i_seconds
-            or new.poll_interval_legend_ii_iii_seconds
-            != old.poll_interval_legend_ii_iii_seconds
+            or new.poll_interval_legend_ii_iii_seconds != old.poll_interval_legend_ii_iii_seconds
         ):
             self._poller.apply_tuning_poll_intervals()

@@ -5,6 +5,7 @@ and standard messages live here. Never inline these values elsewhere.
 
 Sources annotated per constant; refresh when CoC patch notes change.
 """
+
 from __future__ import annotations
 
 from enum import IntEnum
@@ -31,6 +32,7 @@ class LeagueType(IntEnum):
 
     Avril 2026 : sémantique TIER (rank-based) — non dérivée des trophées.
     """
+
     UNKNOWN = 0
     LEGEND_III = 1
     LEGEND_II = 2
@@ -54,9 +56,9 @@ LEAGUE_LOWER_BOUND: Final[dict[LeagueType, int]] = {
 COC_API_RANK_CUTOFF: Final[int] = 200
 
 # Quotas de batailles par tier (Avril 2026 update).
-LEGEND_I_DAILY_BATTLES: Final[int] = 8           # daily quota
-LEGEND_II_WEEKLY_BATTLES: Final[int] = 30        # weekly tournament
-LEGEND_III_WEEKLY_BATTLES: Final[int] = 24       # weekly tournament
+LEGEND_I_DAILY_BATTLES: Final[int] = 8  # daily quota
+LEGEND_II_WEEKLY_BATTLES: Final[int] = 30  # weekly tournament
+LEGEND_III_WEEKLY_BATTLES: Final[int] = 24  # weekly tournament
 
 # Format du tournoi : 4 semaines pour Legend I, hebdomadaire pour II/III.
 LEGEND_I_TOURNAMENT_WEEKS: Final[int] = 4
@@ -71,6 +73,13 @@ POLL_INTERVAL_LEGEND_II_III_SECONDS: Final[int] = 1800
 # (juste avant le reset hebdo Supercell, qui tombe en début de semaine).
 WEEKLY_RECAP_DAY_OF_WEEK: Final[int] = 6  # 0=lundi, 6=dimanche
 WEEKLY_RECAP_HOUR_UTC: Final[int] = 22
+
+# Recap attaques faibles Legend I : envoyé chaque LUNDI matin.
+# Résume la semaine écoulée (lun–dim) : jours où le gain moyen < seuil,
+# patterns détectés, conseils ciblés.
+ATTACK_RECAP_DAY_OF_WEEK: Final[int] = 0  # lundi
+ATTACK_RECAP_HOUR_UTC: Final[int] = 9     # 9h UTC ≈ 11h Paris (CEST)
+ATTACK_RECAP_ALERT_KEY: Final[str] = "attack_weekly_recap"  # cooldown dedup
 
 # Digest automatique (/daily + /predict + /score) — un DM par jour et par user.
 DIGEST_POLL_INTERVAL_SECONDS: Final[int] = 300
@@ -89,12 +98,13 @@ RELEGATION_PROXIMITY_TROPHIES: Final[int] = 60
 # Legend II/III use weekly aggregates; per-day tracking is informational.
 # ─────────────────────────────────────────────────────────────────────────────
 LEGEND_I_DAILY_ATTACK_QUOTA: Final[int] = LEGEND_I_DAILY_BATTLES
-LEGEND_I_PACE_WARNING_REMAINING: Final[int] = 4   # < 4 attacks left → warning
+LEGEND_I_PACE_WARNING_REMAINING: Final[int] = 4  # < 4 attacks left → warning
 LEGEND_I_PACE_CRITICAL_REMAINING: Final[int] = 2  # < 2 attacks left → critical
 
 # Legend League daily reset hour (UTC).
-# Source: Supercell server reset documentation.
-LEGEND_DAILY_RESET_HOUR_UTC: Final[int] = 5
+# Défaut ~19h Europe/Paris en heure d'été (CEST = UTC+2 → 17h UTC).
+# Ajuster si besoin (hiver CET = UTC+1 → 18h UTC pour 19h Paris) ou via GAME_TUNING_URL.
+LEGEND_DAILY_RESET_HOUR_UTC: Final[int] = 17
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -103,7 +113,7 @@ LEGEND_DAILY_RESET_HOUR_UTC: Final[int] = 5
 # and multi-attack pile-on. Range [0.0, 1.0]; values >0.7 = high bad luck.
 # ─────────────────────────────────────────────────────────────────────────────
 MALCHANCE_HIGH_THRESHOLD: Final[float] = 0.70
-MALCHANCE_TROPHY_LOSS_NORMAL: Final[int] = 32     # typical defense loss
+MALCHANCE_TROPHY_LOSS_NORMAL: Final[int] = 32  # typical defense loss
 MALCHANCE_OPPONENT_GAP_TOLERANCE: Final[int] = 200  # trophies above defender
 
 
@@ -133,18 +143,21 @@ PACE_PROJECTION_WINDOW_DAYS: Final[int] = 3
 # - Relegation/promotion are sticky → long cooldown.
 # ─────────────────────────────────────────────────────────────────────────────
 ALERT_COOLDOWN_SECONDS: Final[dict[str, int]] = {
-    "relegation_imminent":  3 * 3600,
-    "promotion_possible":   3 * 3600,
-    "pace_critical":        2 * 3600,
-    "pace_warning":         4 * 3600,
-    "streak_positive":      6 * 3600,
-    "streak_negative":      6 * 3600,
-    "season_best_broken":  12 * 3600,
-    "daily_goal_reached":  20 * 3600,
-    "comeback_detected":   12 * 3600,
+    "relegation_imminent": 3 * 3600,
+    "promotion_possible": 3 * 3600,
+    "pace_critical": 2 * 3600,
+    "pace_warning": 4 * 3600,
+    "streak_positive": 6 * 3600,
+    "streak_negative": 6 * 3600,
+    "season_best_broken": 12 * 3600,
+    "daily_goal_reached": 20 * 3600,
+    "comeback_detected": 12 * 3600,
     # Per-defense push: short cooldown to allow back-to-back defenses to fire
     # individually, but long enough to absorb double-poll edge cases.
-    "defense_taken":             60,
+    "defense_taken": 60,
+    # Low-gain attack: 3 min cooldown — chaque attaque faible reçoit un DM
+    # sans spam (le poller ne revient pas avant ~3 min de toute façon).
+    "attack_low_gain": 180,
 }
 
 # Streak detection: number of consecutive events of the same sign required.
@@ -152,6 +165,15 @@ ALERT_STREAK_LENGTH: Final[int] = 3
 
 # Comeback alert: minimum positive net trophies over 24h.
 ALERT_COMEBACK_DELTA: Final[int] = 200
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Low-gain attack analysis
+# Fires when a new attack batch averages < ATTACK_WEAK_GAIN_THRESHOLD trophies.
+# Threshold of 40 = below the median win in Legend I (typical gain ≈ 32–44).
+# Source: community data, Supercell Legend trophy formula.
+# ─────────────────────────────────────────────────────────────────────────────
+ATTACK_WEAK_GAIN_THRESHOLD: Final[int] = 40   # trophies per attack (avg)
+ATTACK_WEAK_MIN_ATTACKS: Final[int] = 1       # min new attacks to evaluate
 
 # Quiet hours: alerts during a user's quiet window are suppressed entirely.
 # (cooldown still consumes the slot to avoid a flood when the window ends.)
@@ -198,9 +220,13 @@ TBL_SCHEMA_MIGRATIONS: Final[str] = "schema_migrations"
 # ─────────────────────────────────────────────────────────────────────────────
 # CoC Legend League canonical id (single league CoC-side; we sub-tier locally
 # via LeagueType III/II/I based on trophy thresholds).
-COC_LEGEND_LEAGUE_ID: Final[int] = 29000022
+#
+# Note (May 2026): Supercell's league id has been observed as 105000036 via the
+# CoC API. We still keep the name-based fallback in /setup for robustness.
+COC_LEGEND_LEAGUE_ID: Final[int] = 105000036
 
-# Trial duration accordée automatiquement à la première liaison via /setup.
+# Durée d'essai par défaut (première liaison /setup ou /premium hors serveur listé).
+# Serveurs avec essai prolongé : EXTENDED_TRIAL_GUILD_IDS + EXTENDED_TRIAL_DAYS (config).
 PREMIUM_TRIAL_DAYS: Final[int] = 7
 
 # Libellé affiché dans Discord. Le montant facturé est celui du Price Stripe
@@ -247,10 +273,6 @@ RANK_MIN_SAMPLES: Final[int] = 20
 # Standard error messages (user-facing, French)
 # ─────────────────────────────────────────────────────────────────────────────
 ERR_PLAYER_NOT_FOUND: Final[str] = "Joueur introuvable. Vérifie le tag."
-ERR_NOT_LINKED: Final[str] = (
-    "Aucun compte CoC lié. Utilise `/lier <#TAG>` d'abord."
-)
-ERR_API_UNAVAILABLE: Final[str] = (
-    "L'API CoC est indisponible. Réessaie dans quelques instants."
-)
+ERR_NOT_LINKED: Final[str] = "Aucun compte CoC lié. Utilise `/lier <#TAG>` d'abord."
+ERR_API_UNAVAILABLE: Final[str] = "L'API CoC est indisponible. Réessaie dans quelques instants."
 ERR_PERMISSION_DENIED: Final[str] = "Tu n'as pas la permission requise."

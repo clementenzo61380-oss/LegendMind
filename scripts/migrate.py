@@ -7,6 +7,7 @@ Usage::
     python scripts/migrate.py --apply
     python scripts/migrate.py --dry-run   # affiche seulement la taille des SQL
 """
+
 from __future__ import annotations
 
 import argparse

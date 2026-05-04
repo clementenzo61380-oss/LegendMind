@@ -1,13 +1,44 @@
 .venv
+venv
+ENV
+env
 .vtest
 .venv_test
 .venv_ci
 __pycache__/
 *.py[cod]
+*$py.class
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Cursor — logs locaux (tu peux versionner .cursor/rules si besoin)
+.cursor/debug*.log
+
 .env
+.env.local
+.env.*.local
+
+# Exports & état local (recréés par le bot)
+data/*.xlsx
+data/.daily_legend_export_last
+*.log
+
+# Garder le dossier data/ vide en repo
+!data/.gitkeep
+
 *.egg-info/
 dist/
 build/

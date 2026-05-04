@@ -7,6 +7,7 @@
 
 Cooldown state is persisted in `alert_history` (no Redis required).
 """
+
 from __future__ import annotations
 
 import enum
@@ -20,6 +21,8 @@ from constants import (
     ALERT_COMEBACK_DELTA,
     ALERT_COOLDOWN_SECONDS,
     ALERT_STREAK_LENGTH,
+    ATTACK_WEAK_GAIN_THRESHOLD,
+    ATTACK_WEAK_MIN_ATTACKS,
     COLOR_DANGER,
     COLOR_INFO,
     COLOR_SUCCESS,
@@ -27,14 +30,11 @@ from constants import (
     LeagueType,
 )
 from models import AttackDelta, LegendSnapshot, UserPreferences
-from services.game_tuning import get_tuning
+
 # LeagueType is imported lazily to avoid pulling constants into the public surface.
 from services.db import Repository
-from services.logic import (
-    check_attack_pace,
-    check_threshold,
-    infer_defense_outcome,
-)
+from services.game_tuning import get_tuning
+from services.logic import check_attack_pace, check_threshold
 from services.metrics_collector import MetricsCollector
 from services.quota import ConsumeResult, QuotaService
 
@@ -52,6 +52,7 @@ class AlertType(str, enum.Enum):
     DAILY_GOAL_REACHED = "daily_goal_reached"
     COMEBACK_DETECTED = "comeback_detected"
     DEFENSE_TAKEN = "defense_taken"
+    ATTACK_LOW_GAIN = "attack_low_gain"
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +62,7 @@ class Alert:
     Cogs treat these as opaque — only `AlertManager.dispatch` builds the
     Discord embed and writes to alert_history.
     """
+
     type: AlertType
     player_tag: str
     discord_user_id: int
@@ -68,6 +70,9 @@ class Alert:
     description: str
     color: int
     cta: str | None = None
+    # Metadata for ATTACK_LOW_GAIN only — passed to AttackFeedbackView.
+    trophies_gained_meta: int = 0
+    n_attacks_meta: int = 0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -124,6 +129,11 @@ _STYLE: dict[AlertType, tuple[str, int, str | None]] = {
         COLOR_WARNING,
         "Désactive cette notification avec `/ping actif:False`.",
     ),
+    AlertType.ATTACK_LOW_GAIN: (
+        "⚔️ Attaque faible détectée",
+        COLOR_WARNING,
+        "Analyse ci-dessus — utilise `/daily` pour voir tes stats d'attaque.",
+    ),
 }
 
 
@@ -169,7 +179,9 @@ class AlertManager:
         return sent
 
     async def evaluate(
-        self, delta: AttackDelta, prefs: UserPreferences,
+        self,
+        delta: AttackDelta,
+        prefs: UserPreferences,
     ) -> list[Alert]:
         """Generate every alert candidate this delta justifies (no dedup yet)."""
         out: list[Alert] = []
@@ -194,110 +206,176 @@ class AlertManager:
                 # is NOT exposed by the public CoC API. We inject a best-effort
                 # estimate derived from the trophy swing — enough to gauge how
                 # bad the defense was without pretending to know the truth.
-                stars_hint, destruction_hint = infer_defense_outcome(lost_delta)
-                out.append(self._build(
-                    AlertType.DEFENSE_TAKEN, current.player_tag, owner,
-                    description=(
-                        f"Tu viens de perdre **{lost_delta}** trophées "
-                        f"(passé de {delta.previous.trophies} à "
-                        f"{current.trophies}).\n\n"
-                        f"**Attaque estimée** : {stars_hint} • "
-                        f"{destruction_hint}\n"
-                        f"_Estimé d'après les trophées perdus — l'API CoC "
-                        f"n'expose pas le détail des défenses subies._"
-                    ),
-                ))
+                out.append(
+                    self._build(
+                        AlertType.DEFENSE_TAKEN,
+                        current.player_tag,
+                        owner,
+                        description=(
+                            f"Tu viens de perdre **{lost_delta}** trophées "
+                            f"(passé de **{delta.previous.trophies:,}** à "
+                            f"**{current.trophies:,}**)."
+                        ),
+                    )
+                )
+
+        # Low-gain attack analysis — Legend I only.
+        # Fires when the player made ≥ 1 new attack AND the average trophy gain
+        # per attack is below ATTACK_WEAK_GAIN_THRESHOLD.
+        # The CoC API exposes cumulative trophies_gained, not per-attack detail,
+        # so we analyse the batch average and give targeted improvement tips.
+        if is_legend_i and prefs.alert_on_defense and delta.new_attacks >= ATTACK_WEAK_MIN_ATTACKS:
+            gained_delta = (
+                current.trophies_gained - delta.previous.trophies_gained
+            )
+            # Guard against season-reset (counter goes to 0): skip when gained_delta
+            # is negative (new season just rolled) or when no trophies were gained.
+            if gained_delta >= 0:
+                avg_gain = gained_delta / delta.new_attacks
+                if avg_gain < ATTACK_WEAK_GAIN_THRESHOLD:
+                    n_s = "s" if delta.new_attacks > 1 else ""
+                    alert = self._build(
+                        AlertType.ATTACK_LOW_GAIN,
+                        current.player_tag,
+                        owner,
+                        description=(
+                            f"Tu viens de faire **{delta.new_attacks}** attaque{n_s} "
+                            f"pour un gain moyen de **{avg_gain:.0f} trophées** "
+                            f"(seuil : {ATTACK_WEAK_GAIN_THRESHOLD}).\n\n"
+                            "**Qu'est-ce qui a posé problème ?** ↓"
+                        ),
+                    )
+                    # Attach metadata so _dispatch_one can build the View.
+                    from dataclasses import replace as _replace
+
+                    alert = _replace(
+                        alert,
+                        trophies_gained_meta=gained_delta,
+                        n_attacks_meta=delta.new_attacks,
+                    )
+                    out.append(alert)
 
         # Threshold (relegation / promotion) — Legend I uniquement.
         # Pour II/III, la promotion/rétrogradation est PAR GROUPE, gérée par
         # Supercell en fin de tournoi hebdo, pas par seuil trophy.
         threshold_tag = check_threshold(current) if is_legend_i else None
         if threshold_tag == "relegation_imminent":
-            out.append(self._build(
-                AlertType.RELEGATION_IMMINENT, current.player_tag, owner,
-                description=(
-                    f"Tu es à **{current.trophies}** trophées, juste au-dessus "
-                    "du seuil de relégation. Une seule défense peut te faire "
-                    "tomber."
-                ),
-            ))
+            out.append(
+                self._build(
+                    AlertType.RELEGATION_IMMINENT,
+                    current.player_tag,
+                    owner,
+                    description=(
+                        f"Tu es à **{current.trophies}** trophées, juste au-dessus "
+                        "du seuil de relégation. Une seule défense peut te faire "
+                        "tomber."
+                    ),
+                )
+            )
         elif threshold_tag == "promotion_possible":
-            out.append(self._build(
-                AlertType.PROMOTION_POSSIBLE, current.player_tag, owner,
-                description=(
-                    f"Tu es à **{current.trophies}** trophées — la prochaine "
-                    "ligue est à portée de main."
-                ),
-            ))
+            out.append(
+                self._build(
+                    AlertType.PROMOTION_POSSIBLE,
+                    current.player_tag,
+                    owner,
+                    description=(
+                        f"Tu es à **{current.trophies}** trophées — la prochaine "
+                        "ligue est à portée de main."
+                    ),
+                )
+            )
 
         # Pace (Legend I daily quota uniquement — II/III en hebdo).
         pace_tag = (
-            check_attack_pace(current.attacks_done, current.league_type)
-            if is_legend_i else None
+            check_attack_pace(current.attacks_done, current.league_type) if is_legend_i else None
         )
         q = get_tuning().legend_i_daily_attack_quota
         if pace_tag == "pace_critical":
-            out.append(self._build(
-                AlertType.PACE_CRITICAL, current.player_tag, owner,
-                description=(
-                    f"{current.attacks_done}/{q} attaques effectuées et le reset "
-                    "approche."
-                ),
-            ))
+            out.append(
+                self._build(
+                    AlertType.PACE_CRITICAL,
+                    current.player_tag,
+                    owner,
+                    description=(
+                        f"{current.attacks_done}/{q} attaques effectuées et le reset approche."
+                    ),
+                )
+            )
         elif pace_tag == "pace_warning":
-            out.append(self._build(
-                AlertType.PACE_WARNING, current.player_tag, owner,
-                description=(
-                    f"{current.attacks_done}/{q} attaques aujourd'hui — il reste "
-                    "du temps mais ne traîne pas."
-                ),
-            ))
+            out.append(
+                self._build(
+                    AlertType.PACE_WARNING,
+                    current.player_tag,
+                    owner,
+                    description=(
+                        f"{current.attacks_done}/{q} attaques aujourd'hui — il reste "
+                        "du temps mais ne traîne pas."
+                    ),
+                )
+            )
 
         # Streaks: read recent snapshots and check sign-consistency.
         streak = await self._detect_streak(current.player_tag)
         if streak == AlertType.STREAK_POSITIVE:
-            out.append(self._build(
-                streak, current.player_tag, owner,
-                description=(
-                    f"{ALERT_STREAK_LENGTH} attaques gagnantes consécutives. "
-                    "Continue !"
-                ),
-            ))
+            out.append(
+                self._build(
+                    streak,
+                    current.player_tag,
+                    owner,
+                    description=(
+                        f"{ALERT_STREAK_LENGTH} attaques gagnantes consécutives. Continue !"
+                    ),
+                )
+            )
         elif streak == AlertType.STREAK_NEGATIVE:
-            out.append(self._build(
-                streak, current.player_tag, owner,
-                description=(
-                    f"{ALERT_STREAK_LENGTH} défenses perdantes consécutives. "
-                    "Pense à attaquer pour casser le cycle."
-                ),
-            ))
+            out.append(
+                self._build(
+                    streak,
+                    current.player_tag,
+                    owner,
+                    description=(
+                        f"{ALERT_STREAK_LENGTH} défenses perdantes consécutives. "
+                        "Pense à attaquer pour casser le cycle."
+                    ),
+                )
+            )
 
         # 24h comeback.
         if await self._detect_comeback(current):
-            out.append(self._build(
-                AlertType.COMEBACK_DETECTED, current.player_tag, owner,
-                description=(
-                    f"+{ALERT_COMEBACK_DELTA} trophées ou plus en 24h. "
-                    "Belle remontée !"
-                ),
-            ))
+            out.append(
+                self._build(
+                    AlertType.COMEBACK_DETECTED,
+                    current.player_tag,
+                    owner,
+                    description=(
+                        f"+{ALERT_COMEBACK_DELTA} trophées ou plus en 24h. Belle remontée !"
+                    ),
+                )
+            )
 
         # Season best.
         if await self._detect_season_best(current):
-            out.append(self._build(
-                AlertType.SEASON_BEST_BROKEN, current.player_tag, owner,
-                description=(
-                    f"Nouveau record personnel de saison : "
-                    f"**{current.trophies}** trophées."
-                ),
-            ))
+            out.append(
+                self._build(
+                    AlertType.SEASON_BEST_BROKEN,
+                    current.player_tag,
+                    owner,
+                    description=(
+                        f"Nouveau record personnel de saison : **{current.trophies}** trophées."
+                    ),
+                )
+            )
 
         # Daily goal reached (delegated — needs goal lookup).
         if await self._detect_daily_goal(delta):
-            out.append(self._build(
-                AlertType.DAILY_GOAL_REACHED, current.player_tag, owner,
-                description="Tu as atteint ton objectif d'attaques du jour.",
-            ))
+            out.append(
+                self._build(
+                    AlertType.DAILY_GOAL_REACHED,
+                    current.player_tag,
+                    owner,
+                    description="Tu as atteint ton objectif d'attaques du jour.",
+                )
+            )
 
         return out
 
@@ -306,12 +384,14 @@ class AlertManager:
         if await self._is_in_quiet_hours(alert.discord_user_id):
             return False
         last_at = await self._repo.get_last_alert_at(
-            alert.player_tag, alert.type.value,
+            alert.player_tag,
+            alert.type.value,
         )
         if last_at is None:
             return True
         cooldown = ALERT_COOLDOWN_SECONDS.get(
-            alert.type.value, self._default_cooldown,
+            alert.type.value,
+            self._default_cooldown,
         )
         elapsed = (datetime.now(timezone.utc) - last_at).total_seconds()
         return elapsed >= cooldown
@@ -351,25 +431,45 @@ class AlertManager:
             except discord.HTTPException:
                 log.exception(
                     "fetch_user failed for alert %s to %d",
-                    alert.type.value, alert.discord_user_id,
+                    alert.type.value,
+                    alert.discord_user_id,
                 )
                 return
+        # For ATTACK_LOW_GAIN, attach the interactive feedback view.
+        view: discord.ui.View | None = None
+        if alert.type is AlertType.ATTACK_LOW_GAIN:
+            from cogs.attack_feedback import AttackFeedbackView
+
+            view = AttackFeedbackView(
+                repo=self._repo,
+                player_tag=alert.player_tag,
+                discord_user_id=alert.discord_user_id,
+                trophies_gained=alert.trophies_gained_meta,
+                n_attacks=alert.n_attacks_meta,
+            )
         try:
-            await user.send(embed=embed)
+            if view is not None:
+                await user.send(embed=embed, view=view)
+            else:
+                await user.send(embed=embed)
         except discord.Forbidden:
             log.info(
                 "DM blocked for user %d (alert %s)",
-                alert.discord_user_id, alert.type.value,
+                alert.discord_user_id,
+                alert.type.value,
             )
         except discord.HTTPException:
             log.exception(
                 "Failed to DM alert %s to %d",
-                alert.type.value, alert.discord_user_id,
+                alert.type.value,
+                alert.discord_user_id,
             )
             return
         await self._repo.record_alert(
-            alert.player_tag, alert.type.value,
-            alert.discord_user_id, alert.description,
+            alert.player_tag,
+            alert.type.value,
+            alert.discord_user_id,
+            alert.description,
         )
         if self._metrics:
             await self._metrics.record_alert_sent()
@@ -413,10 +513,7 @@ class AlertManager:
         if len(snapshots) < n:
             return None
         recent = snapshots[-n:]
-        deltas = [
-            recent[i + 1].trophies - recent[i].trophies
-            for i in range(len(recent) - 1)
-        ]
+        deltas = [recent[i + 1].trophies - recent[i].trophies for i in range(len(recent) - 1)]
         if all(d > 0 for d in deltas):
             return AlertType.STREAK_POSITIVE
         if all(d < 0 for d in deltas):
@@ -426,7 +523,8 @@ class AlertManager:
     async def _detect_comeback(self, current: LegendSnapshot) -> bool:
         since = current.captured_at - timedelta(hours=24)
         snapshots = await self._repo.get_snapshots_since(
-            current.player_tag, since,
+            current.player_tag,
+            since,
         )
         if len(snapshots) < 2:
             return False
@@ -443,10 +541,15 @@ class AlertManager:
         if current.league_type == LeagueType.UNKNOWN:
             return False
         month_start = current.captured_at.replace(
-            day=1, hour=0, minute=0, second=0, microsecond=0,
+            day=1,
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
         )
         snapshots = await self._repo.get_snapshots_since(
-            current.player_tag, month_start,
+            current.player_tag,
+            month_start,
         )
         if not snapshots:
             return False
@@ -510,6 +613,10 @@ def _next_reset_utc() -> datetime:
     now = datetime.now(timezone.utc)
     today_reset = now.replace(
         hour=get_tuning().legend_daily_reset_hour_utc,
-        minute=0, second=0, microsecond=0,
+        minute=0,
+        second=0,
+        microsecond=0,
     )
     return today_reset if today_reset > now else today_reset + timedelta(days=1)
+
+

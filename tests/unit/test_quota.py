@@ -1,4 +1,5 @@
 """Tests for QuotaService — Free 50/mois, illimité Premium / Trial."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -24,7 +25,9 @@ class _FakeRepo:
 
     async def get_ping_quota(self, _user_id: int, _ym: str) -> PingQuotaState:
         return PingQuotaState(
-            discord_user_id=42, year_month=_ym, used=self.used,
+            discord_user_id=42,
+            year_month=_ym,
+            used=self.used,
             warned_full=self.warned,
         )
 
@@ -48,17 +51,10 @@ class _FakeBilling:
     async def get_subscription(self, user_id: int) -> Subscription:
         return Subscription(
             discord_user_id=user_id,
-            plan=(
-                SubscriptionPlan.PREMIUM if self.entitled
-                else SubscriptionPlan.FREE
-            ),
-            status=(
-                SubscriptionStatus.ACTIVE if self.entitled
-                else SubscriptionStatus.INACTIVE
-            ),
+            plan=(SubscriptionPlan.PREMIUM if self.entitled else SubscriptionPlan.FREE),
+            status=(SubscriptionStatus.ACTIVE if self.entitled else SubscriptionStatus.INACTIVE),
             current_period_end=(
-                datetime(2099, 1, 1, tzinfo=timezone.utc) if self.entitled
-                else None
+                datetime(2099, 1, 1, tzinfo=timezone.utc) if self.entitled else None
             ),
         )
 

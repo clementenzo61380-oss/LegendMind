@@ -1,4 +1,5 @@
 """Observabilité polling + latences (prompt §8) — état en mémoire."""
+
 from __future__ import annotations
 
 import asyncio

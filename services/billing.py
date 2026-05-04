@@ -10,14 +10,17 @@ Architecture:
 
 Design notes
 ------------
-- The trial is granted automatically at ``/setup`` and is idempotent: any
-  subsequent attempt is a no-op (the ``trial_used`` flag persists forever).
+- The trial is granted automatically at ``/setup`` / ``/premium`` and is
+  idempotent: any subsequent attempt is a no-op (the ``trial_used`` flag
+  persists forever). Duration is ``PREMIUM_TRIAL_DAYS`` by default, or longer
+  on guilds listed in ``extended_trial_guild_ids`` (env).
 - We never trust the client for billing state — the only writes from outside
   the webhook are: trial grant (one-shot) and customer-id binding (on first
   Checkout session).
 - The Stripe library is imported lazily so the bot still starts when Stripe
   isn't configured (the Free tier remains fully functional).
 """
+
 from __future__ import annotations
 
 import logging
@@ -30,6 +33,15 @@ from models import Subscription, SubscriptionPlan, SubscriptionStatus
 from services.db import Repository
 
 log = logging.getLogger(__name__)
+
+
+def subscription_trial_window_days(sub: Subscription) -> int:
+    """Jours accordés sur l'essai en cours (fin − début), sinon défaut global."""
+    if sub.trial_started_at is not None and sub.current_period_end is not None:
+        d = (sub.current_period_end - sub.trial_started_at).days
+        if d >= 1:
+            return d
+    return PREMIUM_TRIAL_DAYS
 
 
 class BillingService:
@@ -48,11 +60,15 @@ class BillingService:
         stripe_success_url: str | None,
         stripe_cancel_url: str | None,
         lifetime_entitled_discord_ids: frozenset[int] | None = None,
+        extended_trial_guild_ids: frozenset[int] | None = None,
+        extended_trial_days: int = 60,
     ) -> None:
         self._repo = repository
-        self._lifetime_ids: frozenset[int] = (
-            lifetime_entitled_discord_ids or frozenset()
+        self._lifetime_ids: frozenset[int] = lifetime_entitled_discord_ids or frozenset()
+        self._extended_trial_guild_ids: frozenset[int] = (
+            extended_trial_guild_ids or frozenset()
         )
+        self._extended_trial_days: int = max(1, int(extended_trial_days))
         self._api_key = stripe_api_key
         self._price_id = stripe_price_id_monthly
         self._success_url = stripe_success_url or "https://discord.com/channels/@me"
@@ -87,9 +103,23 @@ class BillingService:
         """Pass-through to repo — exposed for cogs that build embeds."""
         return await self._repo.get_subscription(discord_user_id)
 
+    def trial_duration_days(self, guild_id: int | None) -> int:
+        """Jours d'essai accordés au premier grant (setup/premium) selon le serveur."""
+        if guild_id is not None and guild_id in self._extended_trial_guild_ids:
+            return self._extended_trial_days
+        return PREMIUM_TRIAL_DAYS
+
     # ── trial (one-shot, idempotent) ─────────────────────────────────────
-    async def start_trial(self, discord_user_id: int) -> Subscription:
-        """Grant the 7-day trial **once** per Discord user.
+    async def start_trial(
+        self,
+        discord_user_id: int,
+        *,
+        guild_id: int | None = None,
+    ) -> Subscription:
+        """Grant the Premium trial **once** per Discord user.
+
+        Duration is ``PREMIUM_TRIAL_DAYS`` by default, or ``extended_trial_days``
+        when ``guild_id`` is listed in ``extended_trial_guild_ids`` (env).
 
         Idempotent: a second invocation is a no-op and returns the existing
         subscription unchanged. The window is anchored on first call only.
@@ -98,13 +128,20 @@ class BillingService:
         if sub.trial_used:
             return sub
         now = datetime.now(timezone.utc)
+        days = self.trial_duration_days(guild_id)
         sub.plan = SubscriptionPlan.TRIAL
         sub.status = SubscriptionStatus.TRIALING
         sub.trial_used = True
         sub.trial_started_at = now
-        sub.current_period_end = now + timedelta(days=PREMIUM_TRIAL_DAYS)
+        sub.current_period_end = now + timedelta(days=days)
         await self._repo.upsert_subscription(sub)
-        log.info("Trial granted to %d until %s", discord_user_id, sub.current_period_end)
+        log.info(
+            "Trial (%d d) granted to %d until %s (guild_id=%r)",
+            days,
+            discord_user_id,
+            sub.current_period_end,
+            guild_id,
+        )
         return sub
 
     # ── Stripe Checkout ──────────────────────────────────────────────────
@@ -117,8 +154,7 @@ class BillingService:
         """
         if self._stripe is None or not self._price_id:
             raise BillingNotConfigured(
-                "Stripe n'est pas configuré (STRIPE_API_KEY ou "
-                "STRIPE_PRICE_ID_MONTHLY manquant).",
+                "Stripe n'est pas configuré (STRIPE_API_KEY ou STRIPE_PRICE_ID_MONTHLY manquant).",
             )
         sub = await self._repo.get_subscription(discord_user_id)
         params: dict[str, Any] = {
@@ -143,8 +179,10 @@ class BillingService:
         # ``stripe.checkout.Session.create`` is sync (the python lib uses
         # blocking I/O); offload to a thread to keep the event loop alive.
         import asyncio
+
         session = await asyncio.to_thread(
-            self._stripe.checkout.Session.create, **params,
+            self._stripe.checkout.Session.create,
+            **params,
         )
         return str(session.url)
 
@@ -223,12 +261,15 @@ class BillingService:
         period_end_ts = obj.get("current_period_end")
         if period_end_ts is not None:
             sub.current_period_end = datetime.fromtimestamp(
-                int(period_end_ts), tz=timezone.utc,
+                int(period_end_ts),
+                tz=timezone.utc,
             )
         await self._repo.upsert_subscription(sub)
         log.info(
             "Subscription updated for user %d: status=%s end=%s",
-            sub.discord_user_id, sub.status.value, sub.current_period_end,
+            sub.discord_user_id,
+            sub.status.value,
+            sub.current_period_end,
         )
         return True
 

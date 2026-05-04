@@ -3,9 +3,11 @@
 Wires config → coc.Client → Database/Repository → Discord bot → cogs.
 Stays small on purpose; nothing here should know domain logic.
 """
+
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import signal
 from pathlib import Path
@@ -15,6 +17,7 @@ import discord
 from discord.ext import commands
 
 from cogs.admin import AdminCog
+from cogs.attack_feedback import AttackFeedbackCog
 from cogs.billing import BillingCog
 from cogs.coach import CoachCog
 from cogs.dashboard import DashboardCog
@@ -26,6 +29,7 @@ from cogs.tracker import LegendPoller
 from config import Config, load_config
 from models import AttackDelta
 from services.alerts import AlertManager
+from services.attack_recap import WeeklyAttackRecapService
 from services.billing import BillingService
 from services.cache import InMemoryCache
 from services.daily_legend_export import DailyLegendExportService, DailyLegendExportSettings
@@ -38,7 +42,9 @@ from services.patch_sync import PatchNotesSyncService
 from services.quota import QuotaService
 from services.rank_predictor import RankPredictor
 from services.recap import WeeklyRecapService
+from services.season_api import SeasonApiService
 from services.stripe_webhook import StripeWebhookServer
+from services.debug_ndjson import debug_ndjson
 
 
 def _configure_logging(level: str) -> None:
@@ -46,6 +52,75 @@ def _configure_logging(level: str) -> None:
         level=getattr(logging, level.upper(), logging.INFO),
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
+
+async def _purge_global_slash_commands(bot: commands.Bot) -> None:
+    """Delete all global app commands on Discord.
+
+    This is a one-shot maintenance tool to remove 'duplicate' commands after
+    migrating to guild-only sync. It preserves the local tree by restoring
+    commands after the empty sync.
+    """
+    log = logging.getLogger("legendmind.main")
+    cmds = bot.tree.get_commands(guild=None)
+    if not cmds:
+        log.info("Global command purge: no local commands found; syncing empty anyway")
+    log.warning("Purging GLOBAL slash commands (%d) — this affects all servers", len(cmds))
+    debug_ndjson(
+        hypothesis_id="DUP",
+        location="main.py:_purge_global_slash_commands:before",
+        message="purging global commands",
+        data={"local_global_cmds": len(cmds)},
+    )
+    bot.tree.clear_commands(guild=None)
+    try:
+        await bot.tree.sync()
+    finally:
+        # Restore local tree for guild sync / runtime usage.
+        for c in cmds:
+            bot.tree.add_command(c, override=True)
+    debug_ndjson(
+        hypothesis_id="DUP",
+        location="main.py:_purge_global_slash_commands:after",
+        message="purge done",
+        data={},
+    )
+
+
+async def _discord_wait_ready(bot: discord.Client, loop_name: str) -> None:
+    """Guard wait_until_ready for shutdown races / cancel during login.
+
+    When the client tears down mid-flight (Ctrl+C cluster), discord.py may
+    raise RuntimeError from wait_until_ready. Background loops must swallow
+    that instead of bubbling out of asyncio.run().
+    """
+    # #region agent log
+    debug_ndjson(
+        hypothesis_id="SHUT",
+        location="main.py:_discord_wait_ready:enter",
+        message="wait_until_ready entry",
+        data={"loop": loop_name, "closed": bot.is_closed()},
+        run_id="fix-verify",
+    )
+    # #endregion
+    if bot.is_closed():
+        return
+    try:
+        await bot.wait_until_ready()
+    except asyncio.CancelledError:
+        raise
+    except RuntimeError as exc:
+        debug_ndjson(
+            hypothesis_id="SHUT",
+            location="main.py:_discord_wait_ready:skip",
+            message="wait_until_ready aborted",
+            data={
+                "loop": loop_name,
+                "exc_type": type(exc).__name__,
+                "exc": str(exc)[:160],
+            },
+            run_id="fix-verify",
+        )
+        return
 
 
 async def _run(config: Config) -> None:  # noqa: PLR0915 — entry point wiring is linear by design
@@ -56,7 +131,10 @@ async def _run(config: Config) -> None:  # noqa: PLR0915 — entry point wiring 
     repo = Repository(db)
     await repo.ensure_active_season()
 
-    coc_client = coc.Client()
+    # timeout=10 : si l'API CoC ne répond pas en 10s, on lève une exception
+    # immédiatement au lieu d'attendre 30s (défaut). Évite les /setup qui
+    # "tournent" 30 secondes avant d'afficher une erreur.
+    coc_client = coc.Client(timeout=10.0)
     await coc_client.login(config.coc_email, config.coc_password)
 
     intents = discord.Intents.default()
@@ -81,6 +159,8 @@ async def _run(config: Config) -> None:  # noqa: PLR0915 — entry point wiring 
         stripe_success_url=config.stripe_success_url,
         stripe_cancel_url=config.stripe_cancel_url,
         lifetime_entitled_discord_ids=config.lifetime_entitled_discord_ids,
+        extended_trial_guild_ids=config.extended_trial_guild_ids,
+        extended_trial_days=config.extended_trial_days,
     )
     quota = QuotaService(repository=repo, billing=billing)
 
@@ -103,6 +183,15 @@ async def _run(config: Config) -> None:  # noqa: PLR0915 — entry point wiring 
 
     async def _on_delta(delta: AttackDelta) -> None:
         owner_id = await _owner_for_tag_cache.get_or_fetch(delta.current.player_tag)
+        if owner_id is None:
+            debug_ndjson(
+                hypothesis_id="H2",
+                location="main.py:_on_delta:no_owner",
+                message="skipping delta: no discord owner for tag",
+                data={"tag": delta.current.player_tag},
+                run_id="fix-verify",
+            )
+            return
         prefs = await repo.get_preferences(owner_id)
         await alert_manager.evaluate_and_dispatch(delta, prefs)
         try:
@@ -139,10 +228,16 @@ async def _run(config: Config) -> None:  # noqa: PLR0915 — entry point wiring 
         """
         from services.game_tuning import get_tuning
 
-        await bot.wait_until_ready()
+        try:
+            await _discord_wait_ready(bot, "weekly_recap_loop")
+        except asyncio.CancelledError:
+            return
+        if bot.is_closed():
+            return
         while True:
             try:
                 from datetime import datetime, timezone
+
                 now = datetime.now(timezone.utc)
                 tun = get_tuning()
                 if (
@@ -152,27 +247,75 @@ async def _run(config: Config) -> None:  # noqa: PLR0915 — entry point wiring 
                     sent = await recap_service.run()
                     if sent:
                         log.info("Weekly recap dispatched to %d users", sent)
+            except asyncio.CancelledError:
+                raise
             except Exception:  # noqa: BLE001
                 log.exception("Weekly recap loop iteration failed")
             await asyncio.sleep(300)
 
     weekly_recap_task = asyncio.create_task(_weekly_recap_loop())
 
+    # ── Recap attaques du lundi — Legend I ───────────────────────────────
+    attack_recap_service = WeeklyAttackRecapService(bot=bot, repository=repo)
+
+    async def _attack_recap_loop() -> None:
+        """Lundi matin : recap hebdo des attaques faibles pour Legend I.
+
+        Tick toutes les 5 min, ne s'exécute que (lundi, ATTACK_RECAP_HOUR_UTC).
+        La déduplication via alert_history garantit 1 seul DM par semaine.
+        """
+        from constants import ATTACK_RECAP_DAY_OF_WEEK, ATTACK_RECAP_HOUR_UTC
+
+        try:
+            await _discord_wait_ready(bot, "attack_recap_loop")
+        except asyncio.CancelledError:
+            return
+        if bot.is_closed():
+            return
+        while True:
+            try:
+                from datetime import datetime, timezone
+
+                now = datetime.now(timezone.utc)
+                if (
+                    now.weekday() == ATTACK_RECAP_DAY_OF_WEEK
+                    and now.hour == ATTACK_RECAP_HOUR_UTC
+                ):
+                    sent = await attack_recap_service.run()
+                    if sent:
+                        log.info("Attack recap (lundi) dispatched to %d users", sent)
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001
+                log.exception("Attack recap loop iteration failed")
+            await asyncio.sleep(300)
+
+    attack_recap_task = asyncio.create_task(_attack_recap_loop())
+
     # Rank predictor — fetches the global Legend leaderboard every TTL and
     # fits a log-linear curve so we can estimate ANY player's rank from
     # their trophy count (works even outside the API top-200 window).
     rank_predictor = RankPredictor(coc_client=coc_client)
-    await rank_predictor.refresh()  # prime the cache before bot ready
+    # Ne pas bloquer le démarrage du bot sur le refresh du leaderboard.
+    # Le predictor se remplit en arrière-plan ; /predict affiche "—" le temps
+    # du premier fetch (~quelques secondes après le boot).
     rank_predictor.start()
 
     digest_service = DailyDigestService(
-        bot=bot, repository=repo, rank_predictor=rank_predictor,
+        bot=bot,
+        repository=repo,
+        rank_predictor=rank_predictor,
     )
 
     async def _digest_loop() -> None:
         from constants import DIGEST_POLL_INTERVAL_SECONDS
 
-        await bot.wait_until_ready()
+        try:
+            await _discord_wait_ready(bot, "digest_loop")
+        except asyncio.CancelledError:
+            return
+        if bot.is_closed():
+            return
         while True:
             try:
                 from datetime import datetime, timezone
@@ -181,6 +324,8 @@ async def _run(config: Config) -> None:  # noqa: PLR0915 — entry point wiring 
                 n = await digest_service.run_tick(now)
                 if n:
                     log.info("Daily digest delivered to %d users", n)
+            except asyncio.CancelledError:
+                raise
             except Exception:  # noqa: BLE001
                 log.exception("Daily digest loop iteration failed")
             await asyncio.sleep(DIGEST_POLL_INTERVAL_SECONDS)
@@ -197,7 +342,12 @@ async def _run(config: Config) -> None:  # noqa: PLR0915 — entry point wiring 
     legend_export_service = DailyLegendExportService(bot, repo, legend_export_settings)
 
     async def _legend_export_loop() -> None:
-        await bot.wait_until_ready()
+        try:
+            await _discord_wait_ready(bot, "legend_export_loop")
+        except asyncio.CancelledError:
+            return
+        if bot.is_closed():
+            return
         while True:
             try:
                 from datetime import datetime, timezone
@@ -205,6 +355,8 @@ async def _run(config: Config) -> None:  # noqa: PLR0915 — entry point wiring 
                 n = await legend_export_service.run_if_due(datetime.now(timezone.utc))
                 if n:
                     log.info("Export Légende quotidien : %d joueurs", n)
+            except asyncio.CancelledError:
+                raise
             except Exception:  # noqa: BLE001
                 log.exception("Daily legend export loop failed")
             await asyncio.sleep(60)
@@ -223,19 +375,81 @@ async def _run(config: Config) -> None:  # noqa: PLR0915 — entry point wiring 
         await webhook_server.start()
     except OSError as exc:
         log.warning(
-            "Stripe webhook server failed to bind on %s:%d (%s); "
-            "continuing without HTTP server.",
-            config.webhook_host, config.webhook_port, exc,
+            "Stripe webhook server failed to bind on %s:%d (%s); continuing without HTTP server.",
+            config.webhook_host,
+            config.webhook_port,
+            exc,
         )
         webhook_server = None  # type: ignore[assignment]
 
     @bot.event
     async def on_ready() -> None:  # noqa: WPS430
         log.info("Bot ready as %s (%d guilds)", bot.user, len(bot.guilds))
+        mode = (config.slash_sync_mode or "both").strip().lower()
+        if mode not in {"guild", "global", "both"}:
+            log.warning("Unknown SLASH_SYNC_MODE=%r; falling back to 'both'", mode)
+            mode = "both"
+
+        if config.slash_purge_global:
+            try:
+                await _purge_global_slash_commands(bot)
+            except Exception:  # noqa: BLE001
+                log.exception("Global command purge failed")
+
+        # Evidence: what Discord thinks exists, before/after sync.
         try:
-            await bot.tree.sync()
+            global_remote = await bot.tree.fetch_commands()
+            guild_remote_counts: dict[int, int] = {}
+            for g in bot.guilds:
+                guild_remote_counts[g.id] = len(await bot.tree.fetch_commands(guild=g))
+            debug_ndjson(
+                hypothesis_id="DUP",
+                location="main.py:on_ready:remote_counts",
+                message="remote command counts",
+                data={
+                    "sync_mode": mode,
+                    "remote_global": len(global_remote),
+                    "remote_guild_counts": guild_remote_counts,
+                },
+            )
         except Exception:  # noqa: BLE001
-            log.exception("Slash command sync failed")
+            log.exception("Failed to fetch remote commands for debug")
+
+        if mode in {"guild", "both"}:
+            # Sync guild-specific first (instantané).
+            for guild in bot.guilds:
+                try:
+                    bot.tree.copy_global_to(guild=guild)
+                    await bot.tree.sync(guild=guild)
+                    log.info("Slash commands synced to guild %s (%d)", guild.name, guild.id)
+                except Exception:  # noqa: BLE001
+                    log.exception("Guild sync failed for %s", guild.id)
+
+        if mode in {"global", "both"}:
+            # Sync global (peut prendre du temps à se propager).
+            try:
+                await bot.tree.sync()
+                log.info("Global slash commands synced")
+            except Exception:  # noqa: BLE001
+                log.exception("Global slash command sync failed")
+
+        try:
+            global_remote2 = await bot.tree.fetch_commands()
+            guild_remote_counts2: dict[int, int] = {}
+            for g in bot.guilds:
+                guild_remote_counts2[g.id] = len(await bot.tree.fetch_commands(guild=g))
+            debug_ndjson(
+                hypothesis_id="DUP",
+                location="main.py:on_ready:remote_counts_after",
+                message="remote command counts after sync",
+                data={
+                    "sync_mode": mode,
+                    "remote_global": len(global_remote2),
+                    "remote_guild_counts": guild_remote_counts2,
+                },
+            )
+        except Exception:  # noqa: BLE001
+            log.exception("Failed to fetch remote commands after sync for debug")
 
     await bot.add_cog(poller)
     patch_sync.attach_poller(poller)
@@ -244,10 +458,12 @@ async def _run(config: Config) -> None:  # noqa: PLR0915 — entry point wiring 
     await bot.add_cog(DashboardCog(bot, repo, notebook_service, coc_client, billing))
     await bot.add_cog(LeaderboardCog(bot, leaderboard_service, repo))
     await bot.add_cog(GuildAdminCog(bot, repo))
-    await bot.add_cog(SeasonCog(bot, repo))
+    season_api_service = SeasonApiService(coc_client=coc_client, repository=repo)
+    await bot.add_cog(SeasonCog(bot, repo, season_api=season_api_service))
     await bot.add_cog(AdminCog(bot, repo, poller, metrics))
     await bot.add_cog(BillingCog(bot, repo, billing, quota))
     await bot.add_cog(CoachCog(bot, repo, coc_client, rank_predictor))
+    await bot.add_cog(AttackFeedbackCog(bot, repo))
 
     stop_event = asyncio.Event()
 
@@ -268,21 +484,40 @@ async def _run(config: Config) -> None:  # noqa: PLR0915 — entry point wiring 
     log.info("Stopping bot…")
     metrics_flush_task.cancel()
     weekly_recap_task.cancel()
+    attack_recap_task.cancel()
     digest_task.cancel()
     legend_export_task.cancel()
     patch_sync_task.cancel()
     rank_predictor.stop()
-    for t in (
-        metrics_flush_task,
-        weekly_recap_task,
-        digest_task,
-        legend_export_task,
-        patch_sync_task,
-    ):
+
+    bg_names = (
+        ("metrics_flush", metrics_flush_task),
+        ("weekly_recap", weekly_recap_task),
+        ("attack_recap", attack_recap_task),
+        ("digest", digest_task),
+        ("legend_export", legend_export_task),
+        ("patch_sync", patch_sync_task),
+    )
+    for name, t in bg_names:
         try:
             await t
         except asyncio.CancelledError:
             pass
+        except RuntimeError as exc:
+            msg = str(exc).lower()
+            if "properly initialis" in msg:
+                log.debug(
+                    "%s loop ended during Discord teardown: %s", name, exc,
+                )
+                debug_ndjson(
+                    hypothesis_id="SHUT",
+                    location=f"main.py:_run:shutdown.await.{name}",
+                    message="RuntimeError while awaiting cancelled background task",
+                    data={"msg": str(exc)[:200]},
+                    run_id="fix-verify",
+                )
+                continue
+            raise
 
     if webhook_server is not None:
         await webhook_server.stop()
@@ -305,13 +540,20 @@ class _OwnerCache:
         self._cache: dict[str, int] = {}
         self._max = max_entries
 
-    async def get_or_fetch(self, tag: str) -> int:
+    async def get_or_fetch(self, tag: str) -> int | None:
         cached = self._cache.get(tag)
         if cached is not None:
             return cached
         owner = await self._repo.get_owner_id_for_tag(tag)
         if owner is None:
-            return 0
+            debug_ndjson(
+                hypothesis_id="H2",
+                location="main.py:_OwnerCache:get_or_fetch",
+                message="get_owner_id_for_tag returned None",
+                data={"tag": tag},
+                run_id="fix-verify",
+            )
+            return None
         if len(self._cache) >= self._max:
             self._cache.pop(next(iter(self._cache)))
         self._cache[tag] = owner
@@ -321,6 +563,14 @@ class _OwnerCache:
 def main() -> None:
     cfg = load_config()
     _configure_logging(cfg.log_level)
+    # #region agent log
+    debug_ndjson(
+        hypothesis_id="BOOT",
+        location="main.py:main",
+        message="process starting",
+        data={"slash_sync_mode": getattr(cfg, "slash_sync_mode", None)},
+    )
+    # #endregion
     asyncio.run(_run(cfg))
 
 

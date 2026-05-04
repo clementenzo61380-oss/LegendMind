@@ -1,4 +1,5 @@
 """Domain dataclasses (immutable value objects + a few mutable records)."""
+
 from __future__ import annotations
 
 from .player import (

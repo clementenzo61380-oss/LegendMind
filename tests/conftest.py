@@ -5,6 +5,7 @@ toucher à PostgreSQL ni Discord. Les tests d'intégration BDD utilisent
 ``DATABASE_URL_TEST`` (cf. ``tests/integration``) — ils sont skippés si la
 variable n'est pas définie.
 """
+
 from __future__ import annotations
 
 import os
@@ -46,9 +47,14 @@ def snap_factory(fixed_now: datetime):  # type: ignore[no-untyped-def]
     ) -> LegendSnapshot:
         from services.logic import detect_league
 
-        captured = fixed_now.replace() if offset_seconds == 0 else (
-            fixed_now.fromtimestamp(
-                fixed_now.timestamp() + offset_seconds, tz=timezone.utc,
+        captured = (
+            fixed_now.replace()
+            if offset_seconds == 0
+            else (
+                fixed_now.fromtimestamp(
+                    fixed_now.timestamp() + offset_seconds,
+                    tz=timezone.utc,
+                )
             )
         )
         return LegendSnapshot(

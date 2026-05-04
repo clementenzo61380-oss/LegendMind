@@ -3,6 +3,7 @@
 Keeping builders here avoids ``services/*`` importing from ``cogs/*`` and lets
 the automated digest reuse the exact same rendering as the slash commands.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -23,7 +24,9 @@ from services.rank_predictor import RankPredictor, format_rank, rank_emoji
 
 
 def daily_embed_legend_i(
-    tag: str, latest: LegendSnapshot, snapshots: list[LegendSnapshot],
+    tag: str,
+    latest: LegendSnapshot,
+    snapshots: list[LegendSnapshot],
 ) -> discord.Embed:
     quota = get_tuning().legend_i_daily_attack_quota
     embed = discord.Embed(
@@ -77,9 +80,7 @@ def weekly_embed(
     """Hebdo briefing — utilisé par /daily pour Legend II/III."""
     week = current_week_window(snapshots)
     attacks_used = weekly_attacks_used(week, latest.attacks_done)
-    delta_t = (
-        latest.trophies - week[0].trophies if week else 0
-    )
+    delta_t = latest.trophies - week[0].trophies if week else 0
     embed = discord.Embed(
         title=f"📅 Briefing hebdo — {tier_label(tier)} — {tag}",
         color=COLOR_INFO,
@@ -110,10 +111,7 @@ def weekly_embed(
         )
         embed.add_field(
             name="⏳ À faire avant le reset",
-            value=(
-                f"**{remaining} batailles** restantes. "
-                f"Tournoi hebdo : {promo_line}."
-            ),
+            value=(f"**{remaining} batailles** restantes. Tournoi hebdo : {promo_line}."),
             inline=False,
         )
     embed.set_footer(
@@ -139,7 +137,9 @@ def predict_embed_legend_i(
         color=COLOR_INFO,
     )
     embed.add_field(
-        name="🏆 Trophées actuels", value=f"**{latest.trophies}**", inline=True,
+        name="🏆 Trophées actuels",
+        value=f"**{latest.trophies}**",
+        inline=True,
     )
     embed.add_field(
         name="📈 Projection (rythme actuel)",
@@ -189,11 +189,13 @@ def weekly_predict_embed(
     )
     embed.add_field(
         name="🏆 Trophées actuels",
-        value=f"**{latest.trophies}**", inline=True,
+        value=f"**{latest.trophies}**",
+        inline=True,
     )
     embed.add_field(
         name="⚔️ Batailles utilisées",
-        value=f"{attacks_used}/{quota}", inline=True,
+        value=f"{attacks_used}/{quota}",
+        inline=True,
     )
     embed.add_field(
         name="📈 Projection fin de semaine",
@@ -227,7 +229,8 @@ def weekly_predict_embed(
 
 
 def attach_rank_quality_footer(
-    embed: discord.Embed, rank_predictor: RankPredictor,
+    embed: discord.Embed,
+    rank_predictor: RankPredictor,
 ) -> None:
     curve = rank_predictor.curve
     age_min = rank_predictor.leaderboard_age_minutes()
@@ -247,7 +250,10 @@ def attach_rank_quality_footer(
 
 
 def consistency_embed_daily(
-    tag: str, ratio: float, full_days: int, total_days: int,
+    tag: str,
+    ratio: float,
+    full_days: int,
+    total_days: int,
 ) -> discord.Embed:
     q = get_tuning().legend_i_daily_attack_quota
     pct = int(round(ratio * 100))
@@ -324,19 +330,19 @@ def next_reset_utc() -> datetime:
     now = datetime.now(timezone.utc)
     today_reset = now.replace(
         hour=get_tuning().legend_daily_reset_hour_utc,
-        minute=0, second=0, microsecond=0,
+        minute=0,
+        second=0,
+        microsecond=0,
     )
     return today_reset if today_reset > now else today_reset + timedelta(days=1)
 
 
 def yesterday_window(
-    now: datetime, snapshots: list[LegendSnapshot],
+    now: datetime,
+    snapshots: list[LegendSnapshot],
 ) -> tuple[int, int] | None:
     target_day = (now - timedelta(days=1)).astimezone(timezone.utc).date()
-    same_day = [
-        s for s in snapshots
-        if s.captured_at.astimezone(timezone.utc).date() == target_day
-    ]
+    same_day = [s for s in snapshots if s.captured_at.astimezone(timezone.utc).date() == target_day]
     if len(same_day) < 2:
         return None
     same_day.sort(key=lambda s: s.captured_at)
@@ -350,7 +356,10 @@ def current_week_window(
 ) -> list[LegendSnapshot]:
     now = datetime.now(timezone.utc)
     monday = (now - timedelta(days=now.weekday())).replace(
-        hour=0, minute=0, second=0, microsecond=0,
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
     )
     return [s for s in snapshots if s.captured_at >= monday]
 
@@ -360,7 +369,8 @@ def days_since_week_start() -> int:
 
 
 def weekly_attacks_used(
-    week: list[LegendSnapshot], latest_attacks_done: int,
+    week: list[LegendSnapshot],
+    latest_attacks_done: int,
 ) -> int:
     if not week:
         return latest_attacks_done
@@ -374,7 +384,8 @@ def weekly_attacks_used(
 
 
 def weekly_consistency(
-    snapshots: list[LegendSnapshot], quota: int,
+    snapshots: list[LegendSnapshot],
+    quota: int,
 ) -> tuple[int, int, float]:
     if not snapshots or quota <= 0:
         return 0, 0, 0.0

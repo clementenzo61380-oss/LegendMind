@@ -1,4 +1,5 @@
 """Tests unitaires du moteur de patterns / agrégats du Carnet d'Erreurs."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone

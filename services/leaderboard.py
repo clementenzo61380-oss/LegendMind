@@ -1,4 +1,5 @@
 """Classement serveur avec cache TTL (prompt §5)."""
+
 from __future__ import annotations
 
 import logging

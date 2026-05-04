@@ -3,6 +3,7 @@
 Skip si ``DATABASE_URL_TEST`` n'est pas défini : la CI publique n'a pas
 forcément Postgres ; en local, exporter une URL vers une base jetable.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone

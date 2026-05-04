@@ -1,4 +1,5 @@
 """Écriture / append d'un classeur Excel pour l'export quotidien Légende."""
+
 from __future__ import annotations
 
 from pathlib import Path

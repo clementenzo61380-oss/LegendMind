@@ -9,6 +9,7 @@ Garde la responsabilité unique « cycle saisonnier » :
 Aucune écriture SQL ici : tout passe par `Repository`. Cela évite la
 duplication et garantit que les migrations restent une seule source de vérité.
 """
+
 from __future__ import annotations
 
 import logging
@@ -41,7 +42,9 @@ class SeasonService:
         return await self._repo.close_season()
 
     async def get_player_history(
-        self, player_tag: str, limit: int = 12,
+        self,
+        player_tag: str,
+        limit: int = 12,
     ) -> list[SeasonHistoryEntry]:
         """Historique récent (par défaut 12 saisons) du joueur."""
         return await self._repo.list_player_season_history(player_tag, limit=limit)

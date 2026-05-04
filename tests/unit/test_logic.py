@@ -1,4 +1,5 @@
 """Unit tests for `services.logic` — couvre les chemins critiques (prompt §9.2)."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -101,14 +102,24 @@ def test_pace_zero_attacks_with_time_left() -> None:
 
 def test_pace_warning_with_4_attacks_left_at_two_hours() -> None:
     soon = datetime(
-        2026, 5, 3, (LEGEND_DAILY_RESET_HOUR_UTC - 2) % 24, 0, tzinfo=timezone.utc,
+        2026,
+        5,
+        3,
+        (LEGEND_DAILY_RESET_HOUR_UTC - 2) % 24,
+        0,
+        tzinfo=timezone.utc,
     )
     assert _check_attack_pace_legend_i(LEGEND_I_DAILY_ATTACK_QUOTA - 4, soon) is not None
 
 
 def test_pace_critical_with_full_quota_remaining_close_to_reset() -> None:
     soon = datetime(
-        2026, 5, 3, (LEGEND_DAILY_RESET_HOUR_UTC - 1) % 24, 0, tzinfo=timezone.utc,
+        2026,
+        5,
+        3,
+        (LEGEND_DAILY_RESET_HOUR_UTC - 1) % 24,
+        0,
+        tzinfo=timezone.utc,
     )
     assert _check_attack_pace_legend_i(0, soon) == "pace_critical"
 
@@ -119,9 +130,12 @@ def test_pace_done_returns_none() -> None:
 
 
 def test_hours_until_daily_reset_positive() -> None:
-    assert _hours_until_daily_reset(
-        datetime(2026, 5, 3, 4, 0, tzinfo=timezone.utc),
-    ) > 0
+    assert (
+        _hours_until_daily_reset(
+            datetime(2026, 5, 3, 4, 0, tzinfo=timezone.utc),
+        )
+        > 0
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -145,10 +159,14 @@ def test_malchance_high_loss_increases_score() -> None:
 def test_malchance_pile_on_increases_score() -> None:
     base = DefenseData(trophies_lost=32, opponent_tag="#A", opponent_trophies=5800)
     multi = DefenseData(
-        trophies_lost=32, opponent_tag="#A", opponent_trophies=5800, attack_count=4,
+        trophies_lost=32,
+        opponent_tag="#A",
+        opponent_trophies=5800,
+        attack_count=4,
     )
     assert get_malchance_score(multi, LeagueType.LEGEND_II) > get_malchance_score(
-        base, LeagueType.LEGEND_II,
+        base,
+        LeagueType.LEGEND_II,
     )
 
 

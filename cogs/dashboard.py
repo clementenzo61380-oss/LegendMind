@@ -32,6 +32,7 @@ from models import LegendSnapshot, PlayerGoal, UserPreferences
 from services.billing import BillingService
 from services.db import Repository
 from services.debug_ndjson import debug_ndjson
+from services.discord_interactions import defer_ephemeral_safe
 from services.game_tuning import get_tuning
 from services.logic import predict_end_of_season_trophies
 from services.notebook import ErrorNotebookService
@@ -79,7 +80,8 @@ class DashboardCog(commands.Cog):
             message="setup entry",
             data={"guild_id": interaction.guild_id},
         )
-        await interaction.response.defer(ephemeral=True)
+        if not await defer_ephemeral_safe(interaction, log_label="cmd=/setup"):
+            return
         normalised = _normalise_tag(tag)
 
         # 1. Vérification API CoC (existe + Legend League).
@@ -245,7 +247,8 @@ class DashboardCog(commands.Cog):
         → API token.  It rotates on every check, so it proves live access.
         We never store the token — only the resulting `verified=TRUE` flag.
         """
-        await interaction.response.defer(ephemeral=True)
+        if not await defer_ephemeral_safe(interaction, log_label="cmd=/verify"):
+            return
         target = (
             _normalise_tag(tag)
             if tag
@@ -299,7 +302,8 @@ class DashboardCog(commands.Cog):
         interaction: discord.Interaction,
         tag: str | None = None,
     ) -> None:
-        await interaction.response.defer(ephemeral=True)
+        if not await defer_ephemeral_safe(interaction, log_label="cmd=/tier"):
+            return
         target = (
             _normalise_tag(tag)
             if tag
@@ -344,7 +348,8 @@ class DashboardCog(commands.Cog):
         description="Ton tableau de bord Legend League.",
     )
     async def dashboard(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
+        if not await defer_ephemeral_safe(interaction, log_label="cmd=/dashboard"):
+            return
         tag = await _first_active_tag(self._repo, interaction.user.id)
         if tag is None:
             await interaction.followup.send(
@@ -378,7 +383,8 @@ class DashboardCog(commands.Cog):
         interaction: discord.Interaction,
         membre: discord.Member,
     ) -> None:
-        await interaction.response.defer(ephemeral=True)
+        if not await defer_ephemeral_safe(interaction, log_label="cmd=/compare"):
+            return
         my_tag = await _first_active_tag(self._repo, interaction.user.id)
         their_tag = await _first_active_tag(self._repo, membre.id)
         if my_tag is None or their_tag is None:

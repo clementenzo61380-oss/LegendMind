@@ -1,4 +1,5 @@
 """Unit tests `MetricsCollector` — flush horaire + p95."""
+
 from __future__ import annotations
 
 import pytest

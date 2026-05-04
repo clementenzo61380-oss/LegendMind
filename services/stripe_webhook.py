@@ -8,6 +8,7 @@ Lifecycle is owned by ``main.py`` via ``start()`` / ``stop()``. When Stripe
 isn't configured the server still starts but only exposes a 503 endpoint
 (useful for healthcheck probes from the reverse proxy).
 """
+
 from __future__ import annotations
 
 import logging
@@ -54,7 +55,8 @@ class StripeWebhookServer:
         await site.start()
         log.info(
             "Stripe webhook server listening on http://%s:%d/stripe/webhook",
-            self._host, self._port,
+            self._host,
+            self._port,
         )
 
     async def stop(self) -> None:
@@ -77,7 +79,9 @@ class StripeWebhookServer:
 
         try:
             event = stripe.Webhook.construct_event(  # type: ignore[no-untyped-call]
-                payload=body, sig_header=sig_header, secret=self._secret,
+                payload=body,
+                sig_header=sig_header,
+                secret=self._secret,
             )
         except (ValueError, stripe.error.SignatureVerificationError):
             log.warning("Stripe webhook signature verification failed")

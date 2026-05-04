@@ -7,6 +7,7 @@ They verify:
 - /compare produces a correctly structured embed.
 - Empty-data edge cases don't raise.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -29,6 +30,7 @@ def _snap(
 ) -> LegendSnapshot:
     base = datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc)
     from datetime import timedelta
+
     return LegendSnapshot(
         player_tag=tag,
         trophies=trophies,
@@ -43,11 +45,19 @@ def _snap(
 def _make_repo(
     snapshots: list[LegendSnapshot] | None = None,
     goal: PlayerGoal | None = None,
+    verified: bool = False,
+    clan_name: str | None = None,
 ) -> AsyncMock:
     repo = AsyncMock()
     repo.get_snapshots_since.return_value = snapshots or []
     repo.get_goal.return_value = goal
     repo.upsert_goal.return_value = None
+    repo.get_player_row.return_value = {
+        "tag": "#TEST",
+        "verified": verified,
+        "clan_tag": "#TESTCLAN" if clan_name else None,
+        "clan_name": clan_name,
+    }
     repo._db = MagicMock()
     repo._db.pool = AsyncMock()
     repo._db.pool.fetchrow = AsyncMock(return_value={"tag": "#TEST"})
@@ -101,9 +111,7 @@ async def test_history_page_renders_sparkline() -> None:
     # A sparkline uses block characters — confirm at least one field is present.
     fields = embed_dict.get("fields", [])
     assert any(
-        "▁▂▃▄▅▆▇█"[0] in f.get("value", "")
-        or "7 derniers" in f.get("name", "")
-        for f in fields
+        "▁▂▃▄▅▆▇█"[0] in f.get("value", "") or "7 derniers" in f.get("name", "") for f in fields
     )
 
 
@@ -217,22 +225,26 @@ def test_compare_embed_no_medal_on_tie() -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 def test_normalise_tag_adds_hash() -> None:
     from cogs.dashboard import _normalise_tag
+
     assert _normalise_tag("2PP") == "#2PP"
 
 
 def test_normalise_tag_uppercase() -> None:
     from cogs.dashboard import _normalise_tag
+
     assert _normalise_tag("#2pp") == "#2PP"
 
 
 def test_normalise_tag_idempotent() -> None:
     from cogs.dashboard import _normalise_tag
+
     assert _normalise_tag("#2PP") == "#2PP"
 
 
 def test_trophy_sparkline_flat() -> None:
     """All-same trophies → all lowest-block sparkline."""
     from cogs.dashboard import _trophy_sparkline
+
     snaps = [_snap(trophies=6200) for _ in range(5)]
     result = _trophy_sparkline(snaps)
     assert set(result) == {"▁"}
@@ -241,6 +253,7 @@ def test_trophy_sparkline_flat() -> None:
 def test_trophy_sparkline_ascending() -> None:
     """Ascending trophies should end with the highest block."""
     from cogs.dashboard import _trophy_sparkline
+
     snaps = [_snap(trophies=6100 + i * 50) for i in range(8)]
     result = _trophy_sparkline(snaps)
     assert result[-1] == "█"

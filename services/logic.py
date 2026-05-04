@@ -4,6 +4,7 @@ Everything here is synchronous and deterministic so it can be unit-tested
 without fixtures. The functions take dataclasses, return dataclasses or
 primitives, and never log at INFO level (caller's job).
 """
+
 from __future__ import annotations
 
 import math
@@ -99,13 +100,12 @@ def check_attack_pace(
     """
     if league != LeagueType.LEGEND_I:
         return None
-    return _check_attack_pace_legend_i(
-        attacks_done_today, now_utc or datetime.now(timezone.utc)
-    )
+    return _check_attack_pace_legend_i(attacks_done_today, now_utc or datetime.now(timezone.utc))
 
 
 def _check_attack_pace_legend_i(
-    attacks_done_today: int, now_utc: datetime,
+    attacks_done_today: int,
+    now_utc: datetime,
 ) -> str | None:
     tun = get_tuning()
     quota = tun.legend_i_daily_attack_quota
@@ -133,7 +133,9 @@ def _check_attack_pace_legend_i(
 def _hours_until_daily_reset(now_utc: datetime) -> float:
     reset_today = now_utc.replace(
         hour=get_tuning().legend_daily_reset_hour_utc,
-        minute=0, second=0, microsecond=0,
+        minute=0,
+        second=0,
+        microsecond=0,
     )
     if reset_today <= now_utc:
         reset_today = reset_today + timedelta(days=1)
@@ -155,7 +157,8 @@ def get_malchance_score(defense: DefenseData, league: LeagueType) -> float:
         return 0.0
 
     excess_loss = max(
-        0, defense.trophies_lost - MALCHANCE_TROPHY_LOSS_NORMAL,
+        0,
+        defense.trophies_lost - MALCHANCE_TROPHY_LOSS_NORMAL,
     )
     loss_factor = min(1.0, excess_loss / 25.0)  # 25+ excess → fully bad
 
@@ -203,7 +206,8 @@ def infer_defense_outcome(lost_delta: int) -> tuple[str, str]:
 
 
 def aggregate_malchance(
-    defenses: list[DefenseData], league: LeagueType,
+    defenses: list[DefenseData],
+    league: LeagueType,
 ) -> float:
     """Aggregate malchance across multiple defenses (e.g. one day or week).
 
@@ -224,7 +228,8 @@ def aggregate_malchance(
 # Pace score & end-of-season projection
 # ─────────────────────────────────────────────────────────────────────────────
 def calculate_pace_score(
-    snapshots: list[LegendSnapshot], league: LeagueType,
+    snapshots: list[LegendSnapshot],
+    league: LeagueType,
 ) -> float:
     """Compute a [-1, +1] tendency score over the recent snapshot window.
 
@@ -243,7 +248,8 @@ def calculate_pace_score(
 
 
 def predict_end_of_season_trophies(
-    snapshots: list[LegendSnapshot], league: LeagueType,
+    snapshots: list[LegendSnapshot],
+    league: LeagueType,
     season_end: datetime | None = None,
 ) -> int:
     """Project where the player will land at season end.
@@ -276,9 +282,7 @@ def _trophies_slope_per_day(snapshots: list[LegendSnapshot]) -> float:
     if n < 2:
         return 0.0
     base_t = snapshots[0].captured_at
-    xs = [
-        (s.captured_at - base_t).total_seconds() / 86400.0 for s in snapshots
-    ]
+    xs = [(s.captured_at - base_t).total_seconds() / 86400.0 for s in snapshots]
     ys = [float(s.trophies) for s in snapshots]
     mean_x = sum(xs) / n
     mean_y = sum(ys) / n
@@ -313,12 +317,22 @@ def _default_season_end(now: datetime) -> datetime:
     rh = get_tuning().legend_daily_reset_hour_utc
     if now.month == 12:
         return datetime(
-            now.year + 1, 1, 1,
-            rh, 0, 0, tzinfo=timezone.utc,
+            now.year + 1,
+            1,
+            1,
+            rh,
+            0,
+            0,
+            tzinfo=timezone.utc,
         )
     return datetime(
-        now.year, now.month + 1, 1,
-        rh, 0, 0, tzinfo=timezone.utc,
+        now.year,
+        now.month + 1,
+        1,
+        rh,
+        0,
+        0,
+        tzinfo=timezone.utc,
     )
 
 
@@ -331,7 +345,8 @@ def legend_projection_horizon(now: datetime) -> datetime:
 # Legend Consistency Score & optimal attack hour (used by /score and /daily)
 # ─────────────────────────────────────────────────────────────────────────────
 def legend_consistency_score(
-    snapshots: list[LegendSnapshot], days: int = 30,
+    snapshots: list[LegendSnapshot],
+    days: int = 30,
 ) -> tuple[float, int, int]:
     """Pourcentage de jours où le quota Legend I (8/8) a été atteint.
 
@@ -358,15 +373,13 @@ def legend_consistency_score(
     if not by_day:
         return 0.0, 0, 0
     total = len(by_day)
-    full = sum(
-        1 for v in by_day.values()
-        if v >= get_tuning().legend_i_daily_attack_quota
-    )
+    full = sum(1 for v in by_day.values() if v >= get_tuning().legend_i_daily_attack_quota)
     return round(full / total, 3), full, total
 
 
 def optimal_attack_hour(
-    snapshots: list[LegendSnapshot], lookback_days: int = 14,
+    snapshots: list[LegendSnapshot],
+    lookback_days: int = 14,
 ) -> int | None:
     """Heure UTC (0–23) la plus fréquente pour les attaques de l'utilisateur.
 

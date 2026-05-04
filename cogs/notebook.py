@@ -15,6 +15,7 @@ from discord.ext import commands
 from constants import COLOR_INFO, COLOR_WARNING, EMBED_TITLE_NOTEBOOK
 from models import NotebookReport
 from services.db import Repository
+from services.discord_interactions import defer_ephemeral_safe
 from services.notebook import ErrorNotebookService
 
 log = logging.getLogger(__name__)
@@ -45,7 +46,8 @@ class NotebookCog(commands.Cog):
         interaction: discord.Interaction,
         semaine_offset: app_commands.Range[int, 0, 26] = 0,
     ) -> None:
-        await interaction.response.defer(ephemeral=True)
+        if not await defer_ephemeral_safe(interaction, log_label="cmd=/carnet"):
+            return
         tag = await self._resolve_player_tag(interaction.user.id)
         if tag is None:
             await interaction.followup.send(

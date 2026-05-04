@@ -6,6 +6,7 @@ Architecture:
   other services *must* go through `Repository`; raw SQL outside this
   module is a code smell.
 """
+
 from __future__ import annotations
 
 import logging
@@ -141,6 +142,67 @@ _MIGRATIONS: tuple[tuple[str, str], ...] = (
             ADD COLUMN IF NOT EXISTS digest_last_sent_on DATE;
         """,
     ),
+    (
+        "007_players_verified_and_clan",
+        """
+        -- Account ownership verification via CoC in-game token.
+        ALTER TABLE players
+            ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
+        ALTER TABLE players
+            ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
+
+        -- Clan info — refreshed each poll cycle, never NULL after first poll.
+        ALTER TABLE players
+            ADD COLUMN IF NOT EXISTS clan_tag VARCHAR(15);
+        ALTER TABLE players
+            ADD COLUMN IF NOT EXISTS clan_name VARCHAR(64);
+
+        -- Official season history cache — one row per (player_tag, season_id).
+        CREATE TABLE IF NOT EXISTS season_api_history (
+            player_tag   VARCHAR(15)  NOT NULL REFERENCES players(tag)
+                         ON DELETE CASCADE,
+            season_id    VARCHAR(10)  NOT NULL,   -- ex. "2026-04"
+            final_rank   INT,                     -- rank in top-200 if available
+            trophies     INT          NOT NULL,
+            fetched_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (player_tag, season_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_season_api_history_player
+            ON season_api_history (player_tag, season_id DESC);
+        """,
+    ),
+    (
+        "008_attack_feedback",
+        """
+        -- Feedback joueur sur les attaques faibles (< 40 tr. de gain moyen).
+        -- Rempli via les boutons Discord envoyés dans le DM ATTACK_LOW_GAIN.
+        -- Aggrégé le lundi matin pour le recap hebdo d'amélioration.
+        CREATE TABLE IF NOT EXISTS attack_feedback (
+            id              BIGSERIAL    PRIMARY KEY,
+            player_tag      VARCHAR(15)  NOT NULL REFERENCES players(tag)
+                            ON DELETE CASCADE,
+            discord_user_id BIGINT       NOT NULL,
+            -- Trophées gagnés sur ce batch d'attaques (peut être 0).
+            trophies_gained INT          NOT NULL DEFAULT 0,
+            -- Nombre d'attaques du batch.
+            n_attacks       SMALLINT     NOT NULL DEFAULT 1,
+            -- Catégorie sélectionnée par le joueur :
+            --   'timing'    = fail de timing (trop tôt/tard)
+            --   'funnel'    = funnel raté (armée mal orientée)
+            --   'execution' = erreur d'exécution (sorts, drops)
+            --   'other'     = autre / inconnu
+            --   'false_pos' = l'attaque était en réalité correcte
+            feedback        VARCHAR(12)  NOT NULL DEFAULT 'other',
+            -- Message Discord associé (pour éviter les double-clics).
+            discord_message_id BIGINT,
+            logged_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_attack_feedback_player
+            ON attack_feedback (player_tag, logged_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_attack_feedback_week
+            ON attack_feedback (player_tag, logged_at DESC, feedback);
+        """,
+    ),
 )
 
 
@@ -193,9 +255,7 @@ class Database:
         async with self.pool.acquire() as conn:
             applied = {
                 r["version"]
-                for r in await conn.fetch(
-                    f"SELECT version FROM {TBL_SCHEMA_MIGRATIONS}"
-                )
+                for r in await conn.fetch(f"SELECT version FROM {TBL_SCHEMA_MIGRATIONS}")
             }
             for version, body in _MIGRATIONS:
                 if version in applied:
@@ -204,8 +264,7 @@ class Database:
                 async with conn.transaction():
                     await conn.execute(body)
                     await conn.execute(
-                        f"INSERT INTO {TBL_SCHEMA_MIGRATIONS}(version) "
-                        f"VALUES($1)",
+                        f"INSERT INTO {TBL_SCHEMA_MIGRATIONS}(version) VALUES($1)",
                         version,
                     )
 
@@ -221,7 +280,10 @@ class Repository:
 
     # ── players ───────────────────────────────────────────────────────────
     async def link_player(
-        self, tag: str, discord_user_id: int, guild_id: int | None,
+        self,
+        tag: str,
+        discord_user_id: int,
+        guild_id: int | None,
         name: str | None,
     ) -> None:
         """Create or refresh the linkage between a CoC tag and a Discord user.
@@ -240,7 +302,10 @@ class Repository:
                 name            = COALESCE(EXCLUDED.name, {TBL_PLAYERS}.name),
                 is_active       = TRUE
             """,
-            tag, discord_user_id, guild_id, name,
+            tag,
+            discord_user_id,
+            guild_id,
+            name,
         )
 
     async def set_legend_tier(self, tag: str, tier: LeagueType) -> None:
@@ -251,7 +316,8 @@ class Repository:
         """
         await self._db.pool.execute(
             f"UPDATE {TBL_PLAYERS} SET legend_tier=$1 WHERE tag=$2",
-            _tier_to_db(tier), tag,
+            _tier_to_db(tier),
+            tag,
         )
 
     async def get_legend_tier(self, tag: str) -> LeagueType:
@@ -293,8 +359,144 @@ class Repository:
     async def mark_polled(self, tag: str, when: datetime) -> None:
         await self._db.pool.execute(
             f"UPDATE {TBL_PLAYERS} SET last_polled_at=$1 WHERE tag=$2",
-            when, tag,
+            when,
+            tag,
         )
+
+    async def update_clan_info(
+        self,
+        tag: str,
+        clan_tag: str | None,
+        clan_name: str | None,
+    ) -> None:
+        """Refresh the cached clan tag + name for a player (called each poll)."""
+        await self._db.pool.execute(
+            f"""
+            UPDATE {TBL_PLAYERS}
+            SET clan_tag=$1, clan_name=$2
+            WHERE tag=$3
+            """,
+            clan_tag,
+            clan_name,
+            tag,
+        )
+
+    async def set_verified(self, tag: str) -> None:
+        """Mark a player as ownership-verified via CoC in-game token."""
+        await self._db.pool.execute(
+            f"""
+            UPDATE {TBL_PLAYERS}
+            SET verified=TRUE, verified_at=NOW()
+            WHERE tag=$1
+            """,
+            tag,
+        )
+
+    async def get_player_row(self, tag: str) -> dict[str, object] | None:
+        """Return raw player row including verified, clan_tag, clan_name."""
+        row = await self._db.pool.fetchrow(
+            f"SELECT * FROM {TBL_PLAYERS} WHERE tag=$1",
+            tag,
+        )
+        return dict(row) if row else None
+
+    # ── attack feedback ────────────��─────────────────────────────────────
+    async def insert_attack_feedback(
+        self,
+        player_tag: str,
+        discord_user_id: int,
+        trophies_gained: int,
+        n_attacks: int,
+        feedback: str,
+        discord_message_id: int | None = None,
+    ) -> int:
+        """Persist a player's self-reported reason for a weak attack."""
+        row = await self._db.pool.fetchrow(
+            """
+            INSERT INTO attack_feedback
+                (player_tag, discord_user_id, trophies_gained, n_attacks,
+                 feedback, discord_message_id)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id
+            """,
+            player_tag, discord_user_id, trophies_gained, n_attacks,
+            feedback, discord_message_id,
+        )
+        return int(row["id"])
+
+    async def get_attack_feedback_since(
+        self, player_tag: str, since: datetime,
+    ) -> list[dict[str, object]]:
+        """All feedback rows for a player since `since` (for weekly recap)."""
+        rows = await self._db.pool.fetch(
+            """
+            SELECT id, player_tag, discord_user_id, trophies_gained,
+                   n_attacks, feedback, logged_at
+            FROM attack_feedback
+            WHERE player_tag = $1 AND logged_at >= $2
+            ORDER BY logged_at DESC
+            """,
+            player_tag, since,
+        )
+        return [dict(r) for r in rows]
+
+    async def has_attack_recap_been_sent_this_week(
+        self, player_tag: str, week_start: datetime,
+    ) -> bool:
+        """True if the Monday recap was already dispatched this week."""
+        row = await self._db.pool.fetchrow(
+            """
+            SELECT sent_at FROM alert_history
+            WHERE player_tag = $1
+              AND alert_type = 'attack_weekly_recap'
+              AND sent_at >= $2
+            LIMIT 1
+            """,
+            player_tag, week_start,
+        )
+        return row is not None
+
+    # ── official season history (CoC API /leagues/.../seasons/...) ────────
+    async def upsert_season_api_entry(
+        self,
+        player_tag: str,
+        season_id: str,
+        trophies: int,
+        final_rank: int | None,
+    ) -> None:
+        await self._db.pool.execute(
+            """
+            INSERT INTO season_api_history
+                (player_tag, season_id, trophies, final_rank, fetched_at)
+            VALUES ($1, $2, $3, $4, NOW())
+            ON CONFLICT (player_tag, season_id) DO UPDATE SET
+                trophies   = EXCLUDED.trophies,
+                final_rank = EXCLUDED.final_rank,
+                fetched_at = NOW()
+            """,
+            player_tag,
+            season_id,
+            trophies,
+            final_rank,
+        )
+
+    async def get_season_api_history(
+        self,
+        tag: str,
+        limit: int = 12,
+    ) -> list[dict[str, object]]:
+        rows = await self._db.pool.fetch(
+            """
+            SELECT season_id, trophies, final_rank, fetched_at
+            FROM season_api_history
+            WHERE player_tag = $1
+            ORDER BY season_id DESC
+            LIMIT $2
+            """,
+            tag,
+            limit,
+        )
+        return [dict(r) for r in rows]
 
     async def get_owner_id_for_tag(self, tag: str) -> int | None:
         """Return the Discord user id who linked `tag`, or None if unknown."""
@@ -332,7 +534,8 @@ class Repository:
         return [r["tag"] for r in rows]
 
     async def list_active_accounts(
-        self, discord_user_id: int,
+        self,
+        discord_user_id: int,
     ) -> list[tuple[str, str | None, LeagueType]]:
         """Active accounts with their declared tier for the /accounts UI.
 
@@ -347,13 +550,11 @@ class Repository:
             """,
             discord_user_id,
         )
-        return [
-            (r["tag"], r["name"], _tier_from_db(r["legend_tier"]))
-            for r in rows
-        ]
+        return [(r["tag"], r["name"], _tier_from_db(r["legend_tier"])) for r in rows]
 
     async def list_active_legend_players_in_tier(
-        self, *tiers: LeagueType,
+        self,
+        *tiers: LeagueType,
     ) -> list[tuple[str, int, str | None, LeagueType]]:
         """Enumerate active players matching any of the given tiers.
 
@@ -374,8 +575,7 @@ class Repository:
             tier_strings,
         )
         return [
-            (r["tag"], int(r["discord_user_id"]), r["name"],
-             _tier_from_db(r["legend_tier"]))
+            (r["tag"], int(r["discord_user_id"]), r["name"], _tier_from_db(r["legend_tier"]))
             for r in rows
         ]
 
@@ -403,7 +603,8 @@ class Repository:
             SET is_active = FALSE
             WHERE tag = $1 AND discord_user_id = $2 AND is_active = TRUE
             """,
-            tag, discord_user_id,
+            tag,
+            discord_user_id,
         )
         parts = str(status).split()
         return bool(parts) and parts[-1] != "0"
@@ -420,8 +621,12 @@ class Repository:
                      captured_at)
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
                 """,
-                snap.player_tag, snap.trophies, int(snap.league_type),
-                snap.attacks_done, snap.trophies_gained, snap.trophies_lost,
+                snap.player_tag,
+                snap.trophies,
+                int(snap.league_type),
+                snap.attacks_done,
+                snap.trophies_gained,
+                snap.trophies_lost,
                 snap.captured_at,
             )
             return True
@@ -444,7 +649,9 @@ class Repository:
         return _row_to_snapshot(row) if row else None
 
     async def get_latest_snapshot_before(
-        self, tag: str, cutoff: datetime,
+        self,
+        tag: str,
+        cutoff: datetime,
     ) -> LegendSnapshot | None:
         """Dernier snapshot strictement avant ``cutoff`` (bornes de journée Légende)."""
         row = await self._db.pool.fetchrow(
@@ -456,12 +663,15 @@ class Repository:
             ORDER BY captured_at DESC
             LIMIT 1
             """,
-            tag, cutoff,
+            tag,
+            cutoff,
         )
         return _row_to_snapshot(row) if row else None
 
     async def get_snapshots_since(
-        self, tag: str, since: datetime,
+        self,
+        tag: str,
+        since: datetime,
     ) -> list[LegendSnapshot]:
         rows = await self._db.pool.fetch(
             f"""
@@ -471,12 +681,15 @@ class Repository:
             WHERE player_tag = $1 AND captured_at >= $2
             ORDER BY captured_at ASC
             """,
-            tag, since,
+            tag,
+            since,
         )
         return [_row_to_snapshot(r) for r in rows]
 
     async def get_delta_since_last_snapshot(
-        self, tag: str, current: LegendSnapshot,
+        self,
+        tag: str,
+        current: LegendSnapshot,
     ) -> AttackDelta | None:
         """Build an `AttackDelta` between the latest stored snap and `current`.
 
@@ -542,14 +755,21 @@ class Repository:
                 digest_hour_utc       = EXCLUDED.digest_hour_utc,
                 updated_at            = NOW()
             """,
-            prefs.discord_user_id, prefs.enable_error_notebook,
-            prefs.enable_alerts, prefs.quiet_hours_start,
-            prefs.quiet_hours_end, prefs.language,
-            prefs.alert_on_defense, prefs.digest_daily_enabled, hour,
+            prefs.discord_user_id,
+            prefs.enable_error_notebook,
+            prefs.enable_alerts,
+            prefs.quiet_hours_start,
+            prefs.quiet_hours_end,
+            prefs.language,
+            prefs.alert_on_defense,
+            prefs.digest_daily_enabled,
+            hour,
         )
 
     async def list_digest_due_user_ids(
-        self, hour_utc: int, today_utc: date,
+        self,
+        hour_utc: int,
+        today_utc: date,
     ) -> list[int]:
         """Users scheduled for ``hour_utc`` who have not received a digest today."""
         rows = await self._db.pool.fetch(
@@ -559,12 +779,15 @@ class Repository:
               AND digest_hour_utc = $1
               AND (digest_last_sent_on IS NULL OR digest_last_sent_on < $2)
             """,
-            hour_utc, today_utc,
+            hour_utc,
+            today_utc,
         )
         return [int(r["discord_user_id"]) for r in rows]
 
     async def mark_digest_sent(
-        self, discord_user_id: int, sent_on: date,
+        self,
+        discord_user_id: int,
+        sent_on: date,
     ) -> None:
         await self._db.pool.execute(
             f"""
@@ -572,13 +795,15 @@ class Repository:
             SET digest_last_sent_on = $2, updated_at = NOW()
             WHERE discord_user_id = $1
             """,
-            discord_user_id, sent_on,
+            discord_user_id,
+            sent_on,
         )
 
     # ── goals ─────────────────────────────────────────────────────────────
     async def get_goal(self, tag: str) -> PlayerGoal | None:
         row = await self._db.pool.fetchrow(
-            f"SELECT * FROM {TBL_LEAGUE_GOALS} WHERE player_tag=$1", tag,
+            f"SELECT * FROM {TBL_LEAGUE_GOALS} WHERE player_tag=$1",
+            tag,
         )
         if row is None:
             return None
@@ -602,10 +827,11 @@ class Repository:
                 notes                  = EXCLUDED.notes,
                 updated_at             = NOW()
             """,
-            goal.player_tag, goal.target_trophies,
-            goal.target_attacks_per_day, goal.notes,
+            goal.player_tag,
+            goal.target_trophies,
+            goal.target_attacks_per_day,
+            goal.notes,
         )
-
 
     # ── defense log (Carnet d'Erreurs) ────────────────────────────────────
     async def insert_defense(
@@ -627,13 +853,22 @@ class Repository:
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id
             """,
-            player_tag, trophies_lost, opponent_tag, opponent_trophies,
-            attack_count, malchance_score, int(league), season_week,
+            player_tag,
+            trophies_lost,
+            opponent_tag,
+            opponent_trophies,
+            attack_count,
+            malchance_score,
+            int(league),
+            season_week,
         )
         return int(row["id"])
 
     async def get_defenses_between(
-        self, tag: str, start: datetime, end: datetime,
+        self,
+        tag: str,
+        start: datetime,
+        end: datetime,
     ) -> list[DefenseLog]:
         rows = await self._db.pool.fetch(
             f"""
@@ -644,24 +879,34 @@ class Repository:
             WHERE player_tag = $1 AND logged_at >= $2 AND logged_at < $3
             ORDER BY logged_at ASC
             """,
-            tag, start, end,
+            tag,
+            start,
+            end,
         )
         return [_row_to_defense(r) for r in rows]
 
     async def count_defenses_between(
-        self, tag: str, start: datetime, end: datetime,
+        self,
+        tag: str,
+        start: datetime,
+        end: datetime,
     ) -> int:
         v = await self._db.pool.fetchval(
             f"""
             SELECT COUNT(*)::int FROM {TBL_DEFENSE_LOG}
             WHERE player_tag = $1 AND logged_at >= $2 AND logged_at < $3
             """,
-            tag, start, end,
+            tag,
+            start,
+            end,
         )
         return int(v or 0)
 
     async def get_worst_defense_between(
-        self, tag: str, start: datetime, end: datetime,
+        self,
+        tag: str,
+        start: datetime,
+        end: datetime,
     ) -> DefenseLog | None:
         row = await self._db.pool.fetchrow(
             f"""
@@ -673,13 +918,17 @@ class Repository:
             ORDER BY malchance_score DESC, trophies_lost DESC
             LIMIT 1
             """,
-            tag, start, end,
+            tag,
+            start,
+            end,
         )
         return _row_to_defense(row) if row else None
 
     # ── alert history ─────────────────────────────────────────────────────
     async def get_last_alert_at(
-        self, player_tag: str, alert_type: str,
+        self,
+        player_tag: str,
+        alert_type: str,
     ) -> datetime | None:
         row = await self._db.pool.fetchrow(
             f"""
@@ -688,7 +937,8 @@ class Repository:
             ORDER BY sent_at DESC
             LIMIT 1
             """,
-            player_tag, alert_type,
+            player_tag,
+            alert_type,
         )
         return row["sent_at"] if row else None
 
@@ -705,7 +955,10 @@ class Repository:
                 (player_tag, alert_type, discord_user_id, message_preview)
             VALUES ($1, $2, $3, $4)
             """,
-            player_tag, alert_type, discord_user_id, message_preview[:200],
+            player_tag,
+            alert_type,
+            discord_user_id,
+            message_preview[:200],
         )
 
     # ── guild config ──────────────────────────────────────────────────────
@@ -850,7 +1103,9 @@ class Repository:
         return int(parts[-1]) if parts else 0
 
     async def list_player_season_history(
-        self, player_tag: str, limit: int = 8,
+        self,
+        player_tag: str,
+        limit: int = 8,
     ) -> list[SeasonHistoryEntry]:
         rows = await self._db.pool.fetch(
             f"""
@@ -922,7 +1177,10 @@ class Repository:
         return [_row_to_season(r) for r in rows]
 
     async def get_season_results_for_guild(
-        self, season_id: int, guild_id: int, limit: int = 30,
+        self,
+        season_id: int,
+        guild_id: int,
+        limit: int = 30,
     ) -> list[SeasonResultRow]:
         rows = await self._db.pool.fetch(
             f"""
@@ -940,7 +1198,10 @@ class Repository:
         return [_row_to_season_result(r) for r in rows]
 
     async def find_player_season_rank(
-        self, season_id: int, guild_id: int, player_tag: str,
+        self,
+        season_id: int,
+        guild_id: int,
+        player_tag: str,
     ) -> SeasonResultRow | None:
         row = await self._db.pool.fetchrow(
             f"""
@@ -1018,11 +1279,7 @@ class Repository:
                             tag,
                             period_start,
                         )
-                        net = (
-                            trophies - int(first["trophies"])
-                            if first is not None
-                            else 0
-                        )
+                        net = trophies - int(first["trophies"]) if first is not None else 0
                         ranked.append((tag, trophies, lg, net))
                     ranked.sort(key=lambda x: x[1], reverse=True)
                     for idx, (tag, trophies, lg, net) in enumerate(ranked, start=1):
@@ -1279,7 +1536,8 @@ class Repository:
         )
 
     async def get_subscription_by_stripe_customer(
-        self, stripe_customer_id: str,
+        self,
+        stripe_customer_id: str,
     ) -> Subscription | None:
         """Reverse lookup used by the Stripe webhook to map events → users."""
         row = await self._db.pool.fetchrow(
@@ -1304,7 +1562,9 @@ class Repository:
 
     # ── ping quota (50/mois pour les comptes Free) ────────────────────────
     async def get_ping_quota(
-        self, discord_user_id: int, year_month: str,
+        self,
+        discord_user_id: int,
+        year_month: str,
     ) -> PingQuotaState:
         """Fetch the (user, calendar month) bucket — empty if absent."""
         row = await self._db.pool.fetchrow(
@@ -1313,11 +1573,13 @@ class Repository:
             FROM {TBL_PING_QUOTA}
             WHERE discord_user_id = $1 AND year_month = $2
             """,
-            discord_user_id, year_month,
+            discord_user_id,
+            year_month,
         )
         if row is None:
             return PingQuotaState(
-                discord_user_id=discord_user_id, year_month=year_month,
+                discord_user_id=discord_user_id,
+                year_month=year_month,
             )
         return PingQuotaState(
             discord_user_id=int(row["discord_user_id"]),
@@ -1327,7 +1589,9 @@ class Repository:
         )
 
     async def increment_ping_quota(
-        self, discord_user_id: int, year_month: str,
+        self,
+        discord_user_id: int,
+        year_month: str,
     ) -> int:
         """Atomically +1 the bucket and return the new ``used`` value."""
         row = await self._db.pool.fetchrow(
@@ -1340,12 +1604,15 @@ class Repository:
                 updated_at = NOW()
             RETURNING used
             """,
-            discord_user_id, year_month,
+            discord_user_id,
+            year_month,
         )
         return int(row["used"])
 
     async def mark_ping_quota_warned(
-        self, discord_user_id: int, year_month: str,
+        self,
+        discord_user_id: int,
+        year_month: str,
     ) -> None:
         """Flip ``warned_full=TRUE`` so the upsell DM is sent at most once."""
         await self._db.pool.execute(
@@ -1354,7 +1621,8 @@ class Repository:
             SET warned_full = TRUE
             WHERE discord_user_id = $1 AND year_month = $2
             """,
-            discord_user_id, year_month,
+            discord_user_id,
+            year_month,
         )
 
 

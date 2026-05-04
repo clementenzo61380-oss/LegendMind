@@ -1,4 +1,5 @@
 """Tests for BillingService — trial idempotency + entitlement window."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -7,7 +8,7 @@ import pytest
 
 from constants import PREMIUM_TRIAL_DAYS
 from models import Subscription, SubscriptionPlan, SubscriptionStatus
-from services.billing import BillingService
+from services.billing import BillingService, subscription_trial_window_days
 
 
 class _FakeRepo:
@@ -27,13 +28,18 @@ class _FakeRepo:
         self.store[sub.discord_user_id] = sub
 
     async def get_subscription_by_stripe_customer(
-        self, _customer_id: str,
+        self,
+        _customer_id: str,
     ) -> Subscription | None:
         return None
 
 
 def _make_billing(
-    repo: _FakeRepo, *, lifetime: frozenset[int] | None = None,
+    repo: _FakeRepo,
+    *,
+    lifetime: frozenset[int] | None = None,
+    extended_guilds: frozenset[int] | None = None,
+    extended_days: int = 60,
 ) -> BillingService:
     return BillingService(
         repository=repo,  # type: ignore[arg-type]
@@ -42,6 +48,8 @@ def _make_billing(
         stripe_success_url=None,
         stripe_cancel_url=None,
         lifetime_entitled_discord_ids=lifetime,
+        extended_trial_guild_ids=extended_guilds,
+        extended_trial_days=extended_days,
     )
 
 
@@ -60,15 +68,31 @@ async def test_start_trial_grants_seven_days_first_call() -> None:
 
 
 @pytest.mark.asyncio
+async def test_start_trial_extended_guild_uses_configured_days() -> None:
+    repo = _FakeRepo()
+    guild_id = 1241142693464248470
+    svc = _make_billing(
+        repo,
+        extended_guilds=frozenset({guild_id}),
+        extended_days=60,
+    )
+    sub = await svc.start_trial(7, guild_id=guild_id)
+    assert sub.trial_used is True
+    assert sub.current_period_end is not None
+    delta = sub.current_period_end - datetime.now(timezone.utc)
+    assert timedelta(days=59) - timedelta(seconds=5) < delta
+    assert delta < timedelta(days=61) + timedelta(seconds=5)
+    assert subscription_trial_window_days(sub) == 60
+
+
+@pytest.mark.asyncio
 async def test_start_trial_idempotent_no_second_grant() -> None:
     repo = _FakeRepo()
     svc = _make_billing(repo)
     await svc.start_trial(42)
     first_end = repo.store[42].current_period_end
     # Even after expiration, a second call must not extend the trial.
-    repo.store[42].current_period_end = (
-        datetime.now(timezone.utc) - timedelta(days=1)
-    )
+    repo.store[42].current_period_end = datetime.now(timezone.utc) - timedelta(days=1)
     sub = await svc.start_trial(42)
     assert sub.trial_used is True
     assert sub.current_period_end != first_end  # we forced it back; not bumped
@@ -136,7 +160,8 @@ async def test_apply_subscription_updated_event() -> None:
     repo = _FakeRepo()
     svc = _make_billing(repo)
     repo.store[42] = Subscription(
-        discord_user_id=42, stripe_customer_id="cus_42",
+        discord_user_id=42,
+        stripe_customer_id="cus_42",
     )
 
     async def fake_lookup(cid: str) -> Subscription | None:

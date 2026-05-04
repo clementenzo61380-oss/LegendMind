@@ -1,4 +1,5 @@
 """Unit tests pour `services.alerts.AlertManager` (hors HTTP Discord)."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -25,7 +26,11 @@ class _FakeRepo:
         return self.last_alerts.get((tag, alert_type))
 
     async def record_alert(
-        self, tag: str, alert_type: str, user_id: int, preview: str,
+        self,
+        tag: str,
+        alert_type: str,
+        user_id: int,
+        preview: str,
     ) -> None:
         self.recorded.append((tag, alert_type, user_id, preview))
         self.last_alerts[(tag, alert_type)] = datetime.now(timezone.utc)
@@ -34,7 +39,9 @@ class _FakeRepo:
         return self.prefs
 
     async def get_snapshots_since(
-        self, tag: str, _since: datetime,
+        self,
+        tag: str,
+        _since: datetime,
     ) -> list[LegendSnapshot]:
         return self.snapshots.get(tag, [])
 
@@ -186,7 +193,10 @@ async def test_evaluate_skips_when_alerts_disabled() -> None:
 
 
 def _snap_lost(
-    tag: str, when: datetime, trophies: int, lost: int,
+    tag: str,
+    when: datetime,
+    trophies: int,
+    lost: int,
     tier: LeagueType = LeagueType.LEGEND_I,
 ) -> LegendSnapshot:
     return LegendSnapshot(
@@ -222,13 +232,10 @@ async def test_defense_alert_fires_when_opt_in_and_loss_increases() -> None:
     types = [a.type for a in out]
     assert AlertType.DEFENSE_TAKEN in types
     defense_alert = next(a for a in out if a.type == AlertType.DEFENSE_TAKEN)
-    assert "28" in defense_alert.description  # 148 - 120
-    # Inferred attacker outcome (stars + destruction) is appended to give
-    # the user a usable signal despite the API not exposing per-defense data.
-    # 28 lost trophies → 2⭐ band (50–80 % destruction).
-    assert "≈ 2⭐" in defense_alert.description
-    assert "50–80" in defense_alert.description
-    assert "API CoC" in defense_alert.description  # disclosure note
+    assert "28" in defense_alert.description  # 148 - 120 = 28 trophies lost
+    # DM is intentionally kept minimal (no tips) — just the raw trophy loss.
+    assert "5,600" in defense_alert.description   # previous trophies
+    assert "5,572" in defense_alert.description   # current trophies
 
 
 @pytest.mark.asyncio
@@ -299,8 +306,11 @@ async def test_defense_alert_skipped_for_legend_ii_and_iii() -> None:
     for tier in (LeagueType.LEGEND_II, LeagueType.LEGEND_III):
         prev = _snap_lost("#X", base, trophies=5600, lost=120, tier=tier)
         cur = _snap_lost(
-            "#X", base + timedelta(minutes=3),
-            trophies=5572, lost=148, tier=tier,
+            "#X",
+            base + timedelta(minutes=3),
+            trophies=5572,
+            lost=148,
+            tier=tier,
         )
         delta = AttackDelta.between(prev, cur)
         out = await mgr.evaluate(delta, repo.prefs)

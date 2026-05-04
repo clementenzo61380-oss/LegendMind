@@ -1,4 +1,5 @@
 """Fenêtre « journée Légende » (reset UTC issu du tuning) et agrégation stats."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

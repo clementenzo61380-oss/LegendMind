@@ -1,4 +1,5 @@
 """Tests pour ``services.game_tuning`` (snapshot global)."""
+
 from __future__ import annotations
 
 import pytest

@@ -4,6 +4,7 @@ Un seul message Discord par jour et par utilisateur (heure UTC configurable
 via ``/digest``). Gratuit pour tous les comptes liés : ce n'est pas soumis
 au quota ``/ping``.
 """
+
 from __future__ import annotations
 
 import logging
@@ -55,7 +56,8 @@ class DailyDigestService:
         return sent
 
     async def _build_embeds_for_user(
-        self, discord_user_id: int,
+        self,
+        discord_user_id: int,
     ) -> tuple[list[discord.Embed], bool]:
         """Returns ``(embeds, burn_today)``.
 
@@ -77,7 +79,9 @@ class DailyDigestService:
         return embeds, False
 
     async def _embeds_for_tag(
-        self, tag: str, tier: LeagueType,
+        self,
+        tag: str,
+        tier: LeagueType,
     ) -> list[discord.Embed]:
         out: list[discord.Embed] = []
         latest = await self._repo.get_latest_snapshot(tag)
@@ -89,7 +93,10 @@ class DailyDigestService:
             out.append(briefing.daily_embed_legend_i(tag, latest, snapshots))
             out.append(
                 briefing.predict_embed_legend_i(
-                    tag, latest, snapshots, self._rank,
+                    tag,
+                    latest,
+                    snapshots,
+                    self._rank,
                 ),
             )
             since30 = datetime.now(timezone.utc) - timedelta(days=35)
@@ -98,7 +105,10 @@ class DailyDigestService:
             if total_d > 0:
                 out.append(
                     briefing.consistency_embed_daily(
-                        tag, ratio, full_d, total_d,
+                        tag,
+                        ratio,
+                        full_d,
+                        total_d,
                     ),
                 )
         else:
@@ -110,7 +120,12 @@ class DailyDigestService:
             snaps14 = await self._repo.get_snapshots_since(tag, since14)
             out.append(
                 briefing.weekly_predict_embed(
-                    tag, tier, latest, snaps14, q, self._rank,
+                    tag,
+                    tier,
+                    latest,
+                    snaps14,
+                    q,
+                    self._rank,
                 ),
             )
             since29 = datetime.now(timezone.utc) - timedelta(days=29)
@@ -119,7 +134,12 @@ class DailyDigestService:
             if total_w > 0:
                 out.append(
                     briefing.consistency_embed_weekly(
-                        tag, tier, ratio, full_w, total_w, q,
+                        tag,
+                        tier,
+                        ratio,
+                        full_w,
+                        total_w,
+                        q,
                     ),
                 )
         return out

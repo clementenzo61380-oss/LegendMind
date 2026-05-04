@@ -1,4 +1,5 @@
 """Orchestration export Excel : une passe après chaque reset Légende (+ décalage minutes)."""
+
 from __future__ import annotations
 
 import io

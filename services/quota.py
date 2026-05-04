@@ -6,6 +6,7 @@ Trial + Premium users are unlimited (gate via ``BillingService.is_entitled``).
 The quota is enforced at *send time* in ``AlertManager._dispatch_one`` for
 ``AlertType.DEFENSE_TAKEN`` only — every other alert type is unrestricted.
 """
+
 from __future__ import annotations
 
 import enum
@@ -21,9 +22,10 @@ log = logging.getLogger(__name__)
 
 class ConsumeResult(str, enum.Enum):
     """Three-state outcome returned by ``QuotaService.consume_ping``."""
-    UNLIMITED = "unlimited"   # Premium / Trial : no counter touched.
-    OK = "ok"                 # Free, +1 consumed, room remaining.
-    EXHAUSTED = "exhausted"   # Free, monthly cap already hit, send blocked.
+
+    UNLIMITED = "unlimited"  # Premium / Trial : no counter touched.
+    OK = "ok"  # Free, +1 consumed, room remaining.
+    EXHAUSTED = "exhausted"  # Free, monthly cap already hit, send blocked.
 
 
 class QuotaService:
