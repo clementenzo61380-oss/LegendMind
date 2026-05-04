@@ -8,6 +8,7 @@ Pipeline per cycle:
 5. Persist the new snapshot ONLY when state changed (avoids row spam).
 6. If new attacks detected → fan out to the analysis pipeline (later steps).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -34,6 +35,7 @@ from constants import (
 )
 from models import AttackDelta, LegendSnapshot, PollTarget
 from services.db import Repository
+from services.debug_ndjson import debug_ndjson
 from services.game_tuning import get_tuning
 from services.metrics_collector import MetricsCollector
 
@@ -101,20 +103,21 @@ class LegendPoller(commands.Cog):
         for i in range(self._worker_count):
             self._workers.append(
                 asyncio.create_task(
-                    self._worker_run(i, self._queue), name=f"poll-fast-{i}",
+                    self._worker_run(i, self._queue),
+                    name=f"poll-fast-{i}",
                 )
             )
         # One slow worker is enough — quotas are gentle on Legend II/III cohort.
         self._workers.append(
             asyncio.create_task(
-                self._worker_run(99, self._slow_queue), name="poll-slow",
+                self._worker_run(99, self._slow_queue),
+                name="poll-slow",
             )
         )
         self._fast_loop.start()
         self._slow_loop.start()
         log.info(
-            "LegendPoller started: fast=%ds (Legend I), slow=%ds (II/III), "
-            "fast workers=%d",
+            "LegendPoller started: fast=%ds (Legend I), slow=%ds (II/III), fast workers=%d",
             self._fast_poll_seconds,
             get_tuning().poll_interval_legend_ii_iii_seconds,
             self._worker_count,
@@ -130,7 +133,8 @@ class LegendPoller(commands.Cog):
 
     # ── public API ───────────────────────────────────────────────────────
     def subscribe_to_deltas(
-        self, callback: Callable[[AttackDelta], Awaitable[None]],
+        self,
+        callback: Callable[[AttackDelta], Awaitable[None]],
     ) -> None:
         """Register a coroutine ``async (delta: AttackDelta) -> None``.
 
@@ -165,7 +169,8 @@ class LegendPoller(commands.Cog):
             except asyncio.QueueFull:
                 log.warning(
                     "%s poll queue full; dropping %s",
-                    "Fast" if legend_i_only else "Slow", t.player_tag,
+                    "Fast" if legend_i_only else "Slow",
+                    t.player_tag,
                 )
         if self._metrics:
             await self._metrics.set_queue_depth(
@@ -174,15 +179,23 @@ class LegendPoller(commands.Cog):
 
     @_fast_loop.before_loop
     async def _before_fast_loop(self) -> None:
-        await self.bot.wait_until_ready()
+        try:
+            await self.bot.wait_until_ready()
+        except (asyncio.CancelledError, RuntimeError):
+            return
 
     @_slow_loop.before_loop
     async def _before_slow_loop(self) -> None:
-        await self.bot.wait_until_ready()
+        try:
+            await self.bot.wait_until_ready()
+        except (asyncio.CancelledError, RuntimeError):
+            return
 
     # ── workers ──────────────────────────────────────────────────────────
     async def _worker_run(
-        self, idx: int, queue: asyncio.Queue[_PollTask],
+        self,
+        idx: int,
+        queue: asyncio.Queue[_PollTask],
     ) -> None:
         while True:
             task = await queue.get()
@@ -191,21 +204,31 @@ class LegendPoller(commands.Cog):
             except Exception:  # noqa: BLE001
                 log.exception(
                     "Unhandled error in worker %d for %s",
-                    idx, task.target.player_tag,
+                    idx,
+                    task.target.player_tag,
                 )
             finally:
                 queue.task_done()
 
-    def enqueue_immediate(self, target: PollTarget) -> None:
+    def enqueue_immediate(self, target: PollTarget) -> bool:
         """Admin / debug : injecte une cible en tête de traitement.
 
+        Returns True if enqueued, False if the queue is full.
         Routée selon le tier — Legend I dans la file rapide, sinon lente.
         """
         queue = (
-            self._queue if target.legend_tier is LeagueType.LEGEND_I
+            self._queue
+            if target.legend_tier is LeagueType.LEGEND_I
             else self._slow_queue
         )
-        queue.put_nowait(_PollTask(target=target))
+        try:
+            queue.put_nowait(_PollTask(target=target))
+            return True
+        except asyncio.QueueFull:
+            log.warning(
+                "enqueue_immediate: queue full, dropping %s", target.player_tag
+            )
+            return False
 
     async def _process_task(self, task: _PollTask) -> None:
         """Fetch → snapshot → diff → persist → fan out."""
@@ -217,6 +240,32 @@ class LegendPoller(commands.Cog):
             fetch_ok = True
         except coc.errors.NotFound:
             log.info("Player %s gone (404); deactivating", target.player_tag)
+            debug_ndjson(
+                hypothesis_id="H1",
+                location="tracker.py:_process_task:NotFound",
+                message="coc NotFound branch entered",
+                data={
+                    "tag": target.player_tag,
+                    "discord_user_id": target.discord_user_id,
+                },
+                run_id="fix-verify",
+            )
+            try:
+                deactivated = await self._repo.deactivate_player(
+                    target.player_tag, target.discord_user_id
+                )
+            except Exception:  # noqa: BLE001
+                log.exception(
+                    "Failed to deactivate missing player %s", target.player_tag
+                )
+                deactivated = False
+            debug_ndjson(
+                hypothesis_id="H1",
+                location="tracker.py:_process_task:NotFound:after_deactivate",
+                message="deactivate_player result",
+                data={"tag": target.player_tag, "deactivated": deactivated},
+                run_id="fix-verify",
+            )
         except Exception:  # noqa: BLE001
             log.exception("API failure for %s — abandoning cycle", target.player_tag)
         finally:
@@ -233,6 +282,14 @@ class LegendPoller(commands.Cog):
         previous = await self._repo.get_latest_snapshot(target.player_tag)
         await self._repo.mark_polled(target.player_tag, datetime.now(timezone.utc))
 
+        # Refresh clan info on every poll — cheap UPDATE, always up-to-date.
+        clan = getattr(player, "clan", None)
+        await self._repo.update_clan_info(
+            target.player_tag,
+            clan_tag=getattr(clan, "tag", None),
+            clan_name=getattr(clan, "name", None),
+        )
+
         if previous is not None and _is_unchanged(previous, current):
             return  # nothing happened → no row written, no events fired
 
@@ -245,7 +302,9 @@ class LegendPoller(commands.Cog):
         await self._fanout_delta(delta)
 
     async def _maybe_sync_league_roles(
-        self, target: PollTarget, delta: AttackDelta,
+        self,
+        target: PollTarget,
+        delta: AttackDelta,
     ) -> None:
         """Met à jour les rôles Discord si la ligue Legend change (prompt §6)."""
         if delta.previous.league_type == delta.current.league_type:
@@ -313,7 +372,11 @@ class LegendPoller(commands.Cog):
             sleep_for = min(POLL_BACKOFF_MAX_SECONDS, delay + jitter)
             log.warning(
                 "Backoff %.1fs (attempt %d/%d) for %s: %r",
-                sleep_for, attempt, API_RETRY_MAX_ATTEMPTS, tag, last_exc,
+                sleep_for,
+                attempt,
+                API_RETRY_MAX_ATTEMPTS,
+                tag,
+                last_exc,
             )
             await asyncio.sleep(max(0.5, sleep_for))
             delay = min(POLL_BACKOFF_MAX_SECONDS, delay * POLL_BACKOFF_MULTIPLIER)
@@ -322,7 +385,8 @@ class LegendPoller(commands.Cog):
 
     @staticmethod
     def _snapshot_from_player(
-        player: coc.Player, tier: LeagueType,
+        player: coc.Player,
+        tier: LeagueType,
     ) -> LegendSnapshot:
         """Map a coc.Player into our domain snapshot.
 

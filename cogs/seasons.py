@@ -1,4 +1,5 @@
-"""Season labels, archives, and admin close (step 7)."""
+"""Season labels, archives, admin close, and official CoC history."""
+
 from __future__ import annotations
 
 import logging
@@ -11,6 +12,7 @@ from constants import COLOR_INFO, COLOR_SUCCESS, EMBED_TITLE_SEASON, LeagueType
 from services.db import Repository
 from services.logic import legend_projection_horizon
 from services.season import SeasonService
+from services.season_api import SeasonApiService
 
 log = logging.getLogger(__name__)
 
@@ -25,12 +27,18 @@ def _league_label(league: LeagueType) -> str:
 
 
 class SeasonCog(commands.Cog):
-    """`/saison` user view + `/admin_saison_cloturer` operator tool."""
+    """`/saison`, `/historique`, `/admin_saison_cloturer`."""
 
-    def __init__(self, bot: commands.Bot, repository: Repository) -> None:
+    def __init__(
+        self,
+        bot: commands.Bot,
+        repository: Repository,
+        season_api: SeasonApiService | None = None,
+    ) -> None:
         self.bot = bot
         self._repo = repository
         self._svc = SeasonService(repository)
+        self._season_api = season_api
 
     @app_commands.command(
         name="saison",
@@ -40,7 +48,8 @@ class SeasonCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         if interaction.guild_id is None:
             await interaction.followup.send(
-                "Utilisable sur un serveur.", ephemeral=True,
+                "Utilisable sur un serveur.",
+                ephemeral=True,
             )
             return
 
@@ -84,7 +93,9 @@ class SeasonCog(commands.Cog):
         tag="Tag CoC (optionnel : par défaut ton compte lié)",
     )
     async def historique(
-        self, interaction: discord.Interaction, tag: str | None = None,
+        self,
+        interaction: discord.Interaction,
+        tag: str | None = None,
     ) -> None:
         await interaction.response.defer(ephemeral=True)
         resolved: str | None
@@ -95,28 +106,65 @@ class SeasonCog(commands.Cog):
             resolved = await self._repo.get_first_active_tag(interaction.user.id)
         if not resolved:
             await interaction.followup.send(
-                "Aucun compte lié. Utilise `/lier` ou indique un `tag`.",
+                "Aucun compte lié. Utilise `/setup` ou indique un `tag`.",
                 ephemeral=True,
             )
             return
         rows = await self._svc.get_player_history(resolved, limit=8)
-        if not rows:
+
+        # Fetch official CoC history (top-200 check per season) in background.
+        # Results are cached in season_api_history — keyed by (tag, season_id).
+        official: dict[str, dict[str, object]] = {}
+        if self._season_api is not None:
+            try:
+                api_rows = await self._season_api.get_enriched_history(
+                    resolved,
+                    max_seasons=8,
+                )
+                official = {str(r["season_id"]): r for r in api_rows}
+            except Exception:  # noqa: BLE001
+                log.exception("Official season history lookup failed for %s", resolved)
+
+        if not rows and not official:
             await interaction.followup.send(
-                f"Aucun résultat archivé pour `{resolved}`.", ephemeral=True,
+                f"Aucun résultat archivé pour `{resolved}`.",
+                ephemeral=True,
             )
             return
+
         lines: list[str] = []
+
+        # Merge internal results with official data keyed by season label.
+        seen_labels: set[str] = set()
         for r in rows:
             rk = f"#{r.guild_rank}" if r.guild_rank is not None else "—"
+            # Enrich with official rank if the player was in the top-200.
+            api = official.get(r.season_label)
+            official_suffix = ""
+            if api and api.get("final_rank"):
+                official_suffix = f" _(top-200 mondial : #{api['final_rank']})_"
             lines.append(
                 f"`{r.season_label}` · {rk} · **{r.final_trophies}** tr. "
                 f"· {_league_label(r.league_type)} · net {r.net_trophies:+d}"
+                f"{official_suffix}"
             )
+            seen_labels.add(r.season_label)
+
+        # Show official-only seasons (no internal record) for context.
+        for sid, api in sorted(official.items(), reverse=True):
+            if sid in seen_labels:
+                continue
+            rk_txt = f"#{api['final_rank']}" if api.get("final_rank") else "hors top-200"
+            lines.append(
+                f"`{sid}` · {rk_txt} · **{api['trophies']}** tr. _(données officielles Supercell)_"
+            )
+
         embed = discord.Embed(
             title=f"Historique saisons — `{resolved}`",
-            description="\n".join(lines),
+            description="\n".join(lines) if lines else "Aucune donnée.",
             color=COLOR_INFO,
         )
+        embed.set_footer(text="★ = classement interne serveur  •  top-200 = données Supercell")
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(
@@ -128,7 +176,8 @@ class SeasonCog(commands.Cog):
         rows = await self._repo.list_recent_closed_seasons(limit=6)
         if not rows:
             await interaction.followup.send(
-                "Aucune saison clôturée pour l'instant.", ephemeral=True,
+                "Aucune saison clôturée pour l'instant.",
+                ephemeral=True,
             )
             return
         lines: list[str] = []
@@ -163,4 +212,3 @@ class SeasonCog(commands.Cog):
             f"✅ Saison `{old_id}` figée. Nouvelle saison `{new_id}`.",
             ephemeral=True,
         )
-

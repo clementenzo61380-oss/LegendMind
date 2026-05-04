@@ -6,6 +6,7 @@ Surfaces the entitlement model to end users without exposing Stripe directly:
 - ``/accounts`` lists / removes the user's linked CoC tags with a paginated
   `discord.ui.View` of buttons.
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,11 +24,14 @@ from constants import (
     MAX_LINKED_ACCOUNTS_PREMIUM,
     PING_QUOTA_FREE_MONTHLY,
     PREMIUM_MONTHLY_PRICE_EUR_DISPLAY,
-    PREMIUM_TRIAL_DAYS,
     LeagueType,
 )
 from models import Subscription, SubscriptionPlan
-from services.billing import BillingNotConfigured, BillingService
+from services.billing import (
+    BillingNotConfigured,
+    BillingService,
+    subscription_trial_window_days,
+)
 from services.db import Repository
 from services.quota import QuotaService
 
@@ -53,15 +57,16 @@ class BillingCog(commands.Cog):
     @app_commands.command(
         name="premium",
         description=(
-            "Active ton essai gratuit de 7 jours, ou ouvre Stripe pour "
-            "souscrire au Premium."
+            "Active ton essai gratuit Premium (durée selon le serveur), "
+            "ou ouvre Stripe pour souscrire."
         ),
     )
     async def premium(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         if self._billing.is_lifetime_entitled(interaction.user.id):
             await interaction.followup.send(
-                embed=_lifetime_partner_embed(), ephemeral=True,
+                embed=_lifetime_partner_embed(),
+                ephemeral=True,
             )
             return
 
@@ -70,7 +75,10 @@ class BillingCog(commands.Cog):
 
         # Étape 1 : essai pas encore consommé → on l'accorde.
         if not sub.trial_used:
-            sub = await self._billing.start_trial(interaction.user.id)
+            sub = await self._billing.start_trial(
+                interaction.user.id,
+                guild_id=interaction.guild_id,
+            )
             embed = _trial_embed(sub)
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
@@ -86,8 +94,7 @@ class BillingCog(commands.Cog):
             url = await self._billing.start_checkout(interaction.user.id)
         except BillingNotConfigured as exc:
             await interaction.followup.send(
-                f"⚠️ Le paiement n'est pas encore configuré sur cette instance "
-                f"du bot.\n_{exc}_",
+                f"⚠️ Le paiement n'est pas encore configuré sur cette instance du bot.\n_{exc}_",
                 ephemeral=True,
             )
             return
@@ -105,18 +112,20 @@ class BillingCog(commands.Cog):
         accounts = await self._repo.list_active_accounts(interaction.user.id)
         sub = await self._billing.get_subscription(interaction.user.id)
         entitled = await self._billing.is_entitled(interaction.user.id)
-        max_accounts = (
-            MAX_LINKED_ACCOUNTS_PREMIUM if entitled else MAX_LINKED_ACCOUNTS_FREE
-        )
+        max_accounts = MAX_LINKED_ACCOUNTS_PREMIUM if entitled else MAX_LINKED_ACCOUNTS_FREE
         embed = await _accounts_embed(
-            accounts=accounts, sub=sub, max_accounts=max_accounts,
-            quota=self._quota, user_id=interaction.user.id,
+            accounts=accounts,
+            sub=sub,
+            max_accounts=max_accounts,
+            quota=self._quota,
+            user_id=interaction.user.id,
         )
         if not accounts:
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
         view = _AccountsView(
-            repo=self._repo, owner_id=interaction.user.id,
+            repo=self._repo,
+            owner_id=interaction.user.id,
             tags=[t for (t, _n, _tier) in accounts],
         )
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
@@ -139,10 +148,11 @@ def _lifetime_partner_embed() -> discord.Embed:
 
 def _trial_embed(sub: Subscription) -> discord.Embed:
     end = sub.current_period_end
+    n_days = subscription_trial_window_days(sub)
     embed = discord.Embed(
         title="🎁 Essai Premium activé",
         description=(
-            f"Ton essai **{PREMIUM_TRIAL_DAYS} jours** est en cours. "
+            f"Ton essai **{n_days} jours** est en cours. "
             "Profite de :\n"
             "• `/ping` illimité\n"
             "• Jusqu'à **3 comptes** CoC liés (`/accounts`)\n"
@@ -157,8 +167,7 @@ def _trial_embed(sub: Subscription) -> discord.Embed:
             inline=False,
         )
     embed.set_footer(
-        text="À la fin de l'essai : retour automatique au plan Free, "
-             "puis /premium pour souscrire.",
+        text="À la fin de l'essai : retour automatique au plan Free, puis /premium pour souscrire.",
     )
     return embed
 
@@ -197,7 +206,7 @@ def _checkout_embed() -> discord.Embed:
     )
     embed.set_footer(
         text="Paiement géré par Stripe ; ton compte est crédité dès "
-             "réception du webhook (quelques secondes).",
+        "réception du webhook (quelques secondes).",
     )
     return embed
 
@@ -218,9 +227,7 @@ async def _accounts_embed(
     color = COLOR_NEUTRAL if sub.plan is SubscriptionPlan.FREE else COLOR_SUCCESS
     embed = discord.Embed(
         title="🔗 Comptes CoC liés",
-        description=(
-            f"Plan **{plan_label}** — limite : {len(accounts)}/{max_accounts}"
-        ),
+        description=(f"Plan **{plan_label}** — limite : {len(accounts)}/{max_accounts}"),
         color=color,
     )
     if not accounts:
@@ -233,9 +240,7 @@ async def _accounts_embed(
     lines = []
     for tag, name, tier in accounts:
         label_name = f" — {name}" if name else ""
-        lines.append(
-            f"{_tier_emoji(tier)} `{tag}`{label_name} · **{_tier_label(tier)}**"
-        )
+        lines.append(f"{_tier_emoji(tier)} `{tag}`{label_name} · **{_tier_label(tier)}**")
     embed.add_field(name="Comptes", value="\n".join(lines), inline=False)
     remaining = await quota.remaining(user_id)
     if remaining is None:
@@ -299,7 +304,10 @@ class _AccountsView(discord.ui.View):
     """One ✖ button per linked tag — soft-deletes via repo.deactivate_player."""
 
     def __init__(
-        self, repo: Repository, owner_id: int, tags: list[str],
+        self,
+        repo: Repository,
+        owner_id: int,
+        tags: list[str],
     ) -> None:
         super().__init__(timeout=120.0)
         self._repo = repo
@@ -335,5 +343,6 @@ class _RemoveAccountButton(discord.ui.Button[discord.ui.View]):
             )
         else:
             await interaction.response.send_message(
-                f"⚠️ `{self._tag}` n'était plus actif.", ephemeral=True,
+                f"⚠️ `{self._tag}` n'était plus actif.",
+                ephemeral=True,
             )

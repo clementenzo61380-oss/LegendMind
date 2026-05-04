@@ -4,8 +4,10 @@ Three navigable pages (Overview / History / Goals) on a single message,
 plus a modal for editing goals. Every interaction is ephemeral so private
 data never leaks into a public channel.
 """
+
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -29,6 +31,7 @@ from constants import (
 from models import LegendSnapshot, PlayerGoal, UserPreferences
 from services.billing import BillingService
 from services.db import Repository
+from services.debug_ndjson import debug_ndjson
 from services.game_tuning import get_tuning
 from services.logic import predict_end_of_season_trophies
 from services.notebook import ErrorNotebookService
@@ -60,51 +63,118 @@ class DashboardCog(commands.Cog):
     @app_commands.command(
         name="setup",
         description=(
-            "Lie ton compte Clash of Clans (Legend uniquement). "
-            "Active automatiquement l'essai Premium 7 jours."
+            "Lie ton tag CoC en Legend League — essai Premium auto "
+            "(durée selon le serveur)."
         ),
     )
     @app_commands.describe(tag="Ton tag CoC, ex. #2PP0YJU8")
     async def setup_cmd(
-        self, interaction: discord.Interaction, tag: str,
+        self,
+        interaction: discord.Interaction,
+        tag: str,
     ) -> None:
+        debug_ndjson(
+            hypothesis_id="SETUP",
+            location="dashboard.py:/setup:entry",
+            message="setup entry",
+            data={"guild_id": interaction.guild_id},
+        )
         await interaction.response.defer(ephemeral=True)
         normalised = _normalise_tag(tag)
 
         # 1. Vérification API CoC (existe + Legend League).
+        # asyncio.timeout garantit une réponse en ≤ 8s — sans ça, le client
+        # coc.py peut bloquer jusqu'à 10s (timeout client) avant de lever.
         try:
-            player = await self._coc.get_player(normalised)
+            player = await asyncio.wait_for(
+                self._coc.get_player(normalised), timeout=8.0
+            )
+        except asyncio.TimeoutError:
+            await interaction.followup.send(
+                "⏱️ L'API CoC met trop de temps à répondre. Réessaie dans 30 secondes.",
+                ephemeral=True,
+            )
+            return
         except coc.errors.NotFound:
             await interaction.followup.send(
                 f"❌ Tag `{normalised}` introuvable côté Clash of Clans.",
                 ephemeral=True,
             )
             return
-        except Exception:  # noqa: BLE001
-            log.exception("CoC API failure during /setup for %s", normalised)
+        except coc.errors.Maintenance:
             await interaction.followup.send(
-                "⚠️ L'API Clash of Clans n'a pas répondu. Réessaie dans une minute.",
+                "🔧 Les serveurs CoC sont en maintenance. Réessaie dans quelques minutes.",
+                ephemeral=True,
+            )
+            return
+        except coc.errors.PrivateWarLog:
+            # This shouldn't happen for player lookups but guard it anyway.
+            await interaction.followup.send(
+                f"❌ Tag `{normalised}` introuvable ou profil privé.",
+                ephemeral=True,
+            )
+            return
+        except Exception as exc:  # noqa: BLE001
+            log.exception("CoC API failure during /setup for %s", normalised)
+            # Surface a short hint so the player can self-diagnose.
+            hint = str(exc)[:80] if str(exc) else type(exc).__name__
+            await interaction.followup.send(
+                f"⚠️ Erreur API CoC : `{hint}`\nRéessaie dans une minute.",
                 ephemeral=True,
             )
             return
         league = getattr(player, "league", None)
         league_id = getattr(league, "id", None)
-        if league_id != get_tuning().coc_legend_league_id:
-            league_name = getattr(league, "name", "Aucune")
+        league_name = getattr(league, "name", "Aucune")
+        expected_legend_id = get_tuning().coc_legend_league_id
+        is_legend_by_name = str(league_name).strip().lower() == "legend league"
+        debug_ndjson(
+            hypothesis_id="SETUP",
+            location="dashboard.py:/setup:league",
+            message="league check",
+            data={
+                "tag": normalised,
+                "league_id": league_id,
+                "league_name": league_name,
+                "expected_legend_id": expected_legend_id,
+                "is_legend_by_name": is_legend_by_name,
+            },
+        )
+        if league_id != expected_legend_id and not is_legend_by_name:
+            trophies = getattr(player, "trophies", None)
+            log.info(
+                "/setup rejected: not in Legend League tag=%s league_id=%r league_name=%r trophies=%r expected_id=%d",
+                normalised,
+                league_id,
+                league_name,
+                trophies,
+                expected_legend_id,
+            )
             await interaction.followup.send(
                 f"❌ `{normalised}` n'est pas en **Legend League** "
-                f"(actuellement : {league_name}). LegendMind n'accepte que les "
-                "comptes Legend.",
+                f"(actuellement : **{league_name}**, trophées: **{trophies}**).\n"
+                "LegendMind n'accepte que les comptes **Legend League**.\n\n"
+                "Si tu es sûr d'être en Legend : vérifie le tag (0/O), attends 1–2 minutes "
+                "puis réessaie (l'API peut être en retard après un changement de ligue).",
                 ephemeral=True,
             )
             return
+        if league_id != expected_legend_id and is_legend_by_name:
+            # Observed in the wild: league id mismatch but name is Legend League.
+            # Accept to avoid blocking legit users and log for tuning visibility.
+            trophies = getattr(player, "trophies", None)
+            log.warning(
+                "/setup: accepting Legend by name despite league_id mismatch tag=%s league_id=%r expected_id=%d trophies=%r",
+                normalised,
+                league_id,
+                expected_legend_id,
+                trophies,
+            )
 
         # 2. Limite de comptes : Free=1, Premium=3.
         existing = await self._repo.list_active_tags(interaction.user.id)
         entitled = await self._billing.is_entitled(interaction.user.id)
-        max_accounts = (
-            MAX_LINKED_ACCOUNTS_PREMIUM if entitled else MAX_LINKED_ACCOUNTS_FREE
-        )
+        max_accounts = MAX_LINKED_ACCOUNTS_PREMIUM if entitled else MAX_LINKED_ACCOUNTS_FREE
         if normalised not in existing and len(existing) >= max_accounts:
             tier_label = "Premium" if entitled else "Free"
             await interaction.followup.send(
@@ -116,7 +186,7 @@ class DashboardCog(commands.Cog):
             )
             return
 
-        # 3. Liaison + trial 7j auto (idempotent).
+        # 3. Liaison + essai Premium auto (idempotent, durée selon le serveur).
         await self._repo.link_player(
             tag=normalised,
             discord_user_id=interaction.user.id,
@@ -125,7 +195,11 @@ class DashboardCog(commands.Cog):
         )
         sub_before = await self._billing.get_subscription(interaction.user.id)
         trial_was_fresh = not sub_before.trial_used
-        await self._billing.start_trial(interaction.user.id)
+        await self._billing.start_trial(
+            interaction.user.id,
+            guild_id=interaction.guild_id,
+        )
+        trial_days = self._billing.trial_duration_days(interaction.guild_id)
 
         # 4. Pré-remplissage du tier si on a un rank API (top 200 mondial).
         # Sinon, l'utilisateur déclare son tier via le Select ci-dessous.
@@ -138,20 +212,86 @@ class DashboardCog(commands.Cog):
             display_name=getattr(player, "name", normalised),
             tag=normalised,
             trial_was_fresh=trial_was_fresh,
+            trial_days=trial_days,
             api_tier=api_tier,
         )
         view = _TierSelectView(
-            repo=self._repo, owner_id=interaction.user.id, tag=normalised,
-            preselected=api_tier, enable_digest_default=True,
+            repo=self._repo,
+            owner_id=interaction.user.id,
+            tag=normalised,
+            preselected=api_tier,
+            enable_digest_default=True,
         )
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+
+    # ── /verify ───────────────────────────────────────────────────────────
+    @app_commands.command(
+        name="verify",
+        description="Prouve que tu possèdes ton compte CoC via le token en jeu.",
+    )
+    @app_commands.describe(
+        tag="Tag du compte à vérifier (défaut : ton premier compte lié).",
+        token="Token affiché dans CoC : Paramètres → Avancé → API token.",
+    )
+    async def verify_cmd(
+        self,
+        interaction: discord.Interaction,
+        token: str,
+        tag: str | None = None,
+    ) -> None:
+        """Verify account ownership using the Supercell in-game API token.
+
+        The token is a one-time code shown in-game under Settings → Advanced
+        → API token.  It rotates on every check, so it proves live access.
+        We never store the token — only the resulting `verified=TRUE` flag.
+        """
+        await interaction.response.defer(ephemeral=True)
+        target = (
+            _normalise_tag(tag)
+            if tag
+            else await self._repo.get_first_active_tag(interaction.user.id)
+        )
+        if target is None:
+            await interaction.followup.send(
+                "Aucun compte CoC lié. Utilise `/setup tag:#TONTAG` d'abord.",
+                ephemeral=True,
+            )
+            return
+        # Security: only the owner can verify their own account.
+        owner = await self._repo.get_owner_id_for_tag(target)
+        if owner != interaction.user.id:
+            await interaction.followup.send(
+                f"❌ `{target}` n'est pas lié à ton compte Discord.",
+                ephemeral=True,
+            )
+            return
+        try:
+            ok = await self._coc.verify_player_token(target, token.strip())
+        except Exception:  # noqa: BLE001
+            log.exception("verify_player_token failed for %s", target)
+            await interaction.followup.send(
+                "⚠️ L'API CoC n'a pas répondu. Réessaie dans une minute.",
+                ephemeral=True,
+            )
+            return
+        if not ok:
+            await interaction.followup.send(
+                "❌ Token invalide ou expiré.\n"
+                "Le token change après chaque consultation — "
+                "récupère-en un nouveau dans CoC → Paramètres → Avancé → API token.",
+                ephemeral=True,
+            )
+            return
+        await self._repo.set_verified(target)
+        await interaction.followup.send(
+            f"✅ Compte `{target}` **vérifié** — badge ✔ affiché dans ton dashboard.",
+            ephemeral=True,
+        )
 
     # ── /tier ─────────────────────────────────────────────────────────────
     @app_commands.command(
         name="tier",
-        description=(
-            "Déclare/met à jour ton tier Legend (I, II ou III) — Avril 2026."
-        ),
+        description=("Déclare/met à jour ton tier Legend (I, II ou III) — Avril 2026."),
     )
     @app_commands.describe(tag="Tag du compte (par défaut : ton premier compte lié).")
     async def tier_cmd(
@@ -161,7 +301,8 @@ class DashboardCog(commands.Cog):
     ) -> None:
         await interaction.response.defer(ephemeral=True)
         target = (
-            _normalise_tag(tag) if tag
+            _normalise_tag(tag)
+            if tag
             else await self._repo.get_first_active_tag(interaction.user.id)
         )
         if target is None:
@@ -189,7 +330,9 @@ class DashboardCog(commands.Cog):
             color=COLOR_INFO,
         )
         view = _TierSelectView(
-            repo=self._repo, owner_id=interaction.user.id, tag=target,
+            repo=self._repo,
+            owner_id=interaction.user.id,
+            tag=target,
             preselected=current if current is not LeagueType.UNKNOWN else None,
             enable_digest_default=False,
         )
@@ -197,14 +340,15 @@ class DashboardCog(commands.Cog):
 
     # ── /dashboard ────────────────────────────────────────────────────────
     @app_commands.command(
-        name="dashboard", description="Ton tableau de bord Legend League.",
+        name="dashboard",
+        description="Ton tableau de bord Legend League.",
     )
     async def dashboard(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         tag = await _first_active_tag(self._repo, interaction.user.id)
         if tag is None:
             await interaction.followup.send(
-                "Aucun compte CoC lié. Utilise `/lier <#TAG>` d'abord.",
+                "Aucun compte CoC lié. Utilise `/setup tag:#TAG` d'abord.",
                 ephemeral=True,
             )
             return
@@ -218,16 +362,21 @@ class DashboardCog(commands.Cog):
         )
         await view.refresh()
         await interaction.followup.send(
-            embed=view.current_embed, view=view, ephemeral=True,
+            embed=view.current_embed,
+            view=view,
+            ephemeral=True,
         )
 
     # ── /compare ──────────────────────────────────────────────────────────
     @app_commands.command(
-        name="compare", description="Compare tes stats à celles d'un autre membre.",
+        name="compare",
+        description="Compare tes stats à celles d'un autre membre.",
     )
     @app_commands.describe(membre="Le membre Discord à comparer")
     async def compare(
-        self, interaction: discord.Interaction, membre: discord.Member,
+        self,
+        interaction: discord.Interaction,
+        membre: discord.Member,
     ) -> None:
         await interaction.response.defer(ephemeral=True)
         my_tag = await _first_active_tag(self._repo, interaction.user.id)
@@ -243,13 +392,16 @@ class DashboardCog(commands.Cog):
         their_snap = await self._repo.get_latest_snapshot(their_tag)
         if my_snap is None or their_snap is None:
             await interaction.followup.send(
-                "Pas encore assez de données pour comparer.", ephemeral=True,
+                "Pas encore assez de données pour comparer.",
+                ephemeral=True,
             )
             return
 
         embed = _render_compare(
-            interaction.user.display_name, my_snap,
-            membre.display_name, their_snap,
+            interaction.user.display_name,
+            my_snap,
+            membre.display_name,
+            their_snap,
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -300,17 +452,13 @@ class DashboardCog(commands.Cog):
                 "Désactive à tout moment avec `/ping actif:False`."
             )
         else:
-            msg = (
-                "🔕 DM de défense désactivés. Réactive avec `/ping actif:True`."
-            )
+            msg = "🔕 DM de défense désactivés. Réactive avec `/ping actif:True`."
         await interaction.response.send_message(msg, ephemeral=True)
 
     # ── /digest ───────────────────────────────────────────────────────────
     @app_commands.command(
         name="digest",
-        description=(
-            "Briefing DM quotidien (/daily + /predict + /score), 1×/jour, heure UTC."
-        ),
+        description="Digest DM 1×/jour: daily, predict, score — heure UTC réglable.",
     )
     @app_commands.describe(
         actif="True = activer, False = désactiver. Vide = afficher l'état.",
@@ -379,16 +527,18 @@ class _DashboardView(discord.ui.View):
         self._page = self.PAGE_OVERVIEW
         self._snapshots: list[LegendSnapshot] = []
         self._goal: PlayerGoal | None = None
+        self._player_row: dict[str, object] | None = None
         self.current_embed: discord.Embed = discord.Embed(
             title=EMBED_TITLE_DASHBOARD,
         )
 
     # ── data load ────────────────────────────────────────────────────────
     async def refresh(self) -> None:
-        """Reload snapshots + goal and rebuild the current page."""
+        """Reload snapshots + goal + player meta and rebuild the current page."""
         since = datetime.now(timezone.utc) - timedelta(days=7)
         self._snapshots = await self._repo.get_snapshots_since(self._tag, since)
         self._goal = await self._repo.get_goal(self._tag)
+        self._player_row = await self._repo.get_player_row(self._tag)
         self._render()
 
     def _render(self) -> None:
@@ -402,10 +552,31 @@ class _DashboardView(discord.ui.View):
     # ── pages ────────────────────────────────────────────────────────────
     def _render_overview(self) -> discord.Embed:
         latest = self._latest()
-        embed = discord.Embed(
-            title=f"{EMBED_TITLE_DASHBOARD} — Vue d'ensemble",
-            color=COLOR_INFO,
-        )
+        row = self._player_row or {}
+
+        # Build title with verified badge and clan.
+        verified = row.get("verified", False)
+        badge = " ✔" if verified else ""
+        clan_name = row.get("clan_name")
+        clan_tag = row.get("clan_tag")
+        clan_part = f" · 🏰 {clan_name}" if clan_name else ""
+        title = f"{EMBED_TITLE_DASHBOARD}{badge}{clan_part}"
+
+        embed = discord.Embed(title=title, color=COLOR_INFO)
+
+        if clan_tag and clan_name:
+            embed.add_field(
+                name="🏰 Clan",
+                value=f"[{clan_name}](https://link.clashofclans.com/en?action=OpenClanProfile&tag={str(clan_tag).lstrip('#')})",
+                inline=True,
+            )
+        if not verified:
+            embed.add_field(
+                name="🔓 Compte non vérifié",
+                value="Utilise `/verify` pour prouver que ce compte t'appartient.",
+                inline=False,
+            )
+
         if latest is None:
             embed.description = "Aucune donnée pour l'instant. Reviens plus tard."
             return embed
@@ -423,7 +594,8 @@ class _DashboardView(discord.ui.View):
             inline=True,
         )
         prediction = predict_end_of_season_trophies(
-            self._snapshots, latest.league_type,
+            self._snapshots,
+            latest.league_type,
         )
         embed.add_field(
             name="🔮 Projection fin de saison",
@@ -432,10 +604,7 @@ class _DashboardView(discord.ui.View):
         )
         if self._prefs.enable_error_notebook:
             today = datetime.now(timezone.utc).date()
-            today_defenses = [
-                s for s in self._snapshots
-                if s.captured_at.date() == today
-            ]
+            today_defenses = [s for s in self._snapshots if s.captured_at.date() == today]
             # Lightweight today-snapshot count; full malchance comes from /carnet.
             embed.add_field(
                 name="📓 Carnet",
@@ -486,9 +655,7 @@ class _DashboardView(discord.ui.View):
         )
         latest = self._latest()
         if self._goal is None:
-            embed.description = (
-                "Aucun objectif défini. Clique sur ✏️ pour en créer un."
-            )
+            embed.description = "Aucun objectif défini. Clique sur ✏️ pour en créer un."
             return embed
 
         progress = 0.0
@@ -519,7 +686,9 @@ class _DashboardView(discord.ui.View):
         )
         if self._goal.notes:
             embed.add_field(
-                name="📝 Notes", value=self._goal.notes, inline=False,
+                name="📝 Notes",
+                value=self._goal.notes,
+                inline=False,
             )
         return embed
 
@@ -530,7 +699,9 @@ class _DashboardView(discord.ui.View):
     # ── buttons ──────────────────────────────────────────────────────────
     @discord.ui.button(label="Vue d'ensemble", style=discord.ButtonStyle.primary)
     async def go_overview(
-        self, interaction: discord.Interaction, _b: discord.ui.Button[discord.ui.View],
+        self,
+        interaction: discord.Interaction,
+        _b: discord.ui.Button[discord.ui.View],
     ) -> None:
         self._page = self.PAGE_OVERVIEW
         self._render()
@@ -538,7 +709,9 @@ class _DashboardView(discord.ui.View):
 
     @discord.ui.button(label="Historique", style=discord.ButtonStyle.secondary)
     async def go_history(
-        self, interaction: discord.Interaction, _b: discord.ui.Button[discord.ui.View],
+        self,
+        interaction: discord.Interaction,
+        _b: discord.ui.Button[discord.ui.View],
     ) -> None:
         self._page = self.PAGE_HISTORY
         self._render()
@@ -546,7 +719,9 @@ class _DashboardView(discord.ui.View):
 
     @discord.ui.button(label="Objectifs", style=discord.ButtonStyle.secondary)
     async def go_goals(
-        self, interaction: discord.Interaction, _b: discord.ui.Button[discord.ui.View],
+        self,
+        interaction: discord.Interaction,
+        _b: discord.ui.Button[discord.ui.View],
     ) -> None:
         self._page = self.PAGE_GOALS
         self._render()
@@ -554,7 +729,9 @@ class _DashboardView(discord.ui.View):
 
     @discord.ui.button(label="✏️ Modifier l'objectif", style=discord.ButtonStyle.success, row=1)
     async def edit_goal(
-        self, interaction: discord.Interaction, _b: discord.ui.Button[discord.ui.View],
+        self,
+        interaction: discord.Interaction,
+        _b: discord.ui.Button[discord.ui.View],
     ) -> None:
         modal = _EditGoalModal(self, self._goal)
         await interaction.response.send_modal(modal)
@@ -583,7 +760,9 @@ class _EditGoalModal(discord.ui.Modal, title="✏️ Modifier mon objectif"):
     )
 
     def __init__(
-        self, view: _DashboardView, current: PlayerGoal | None,
+        self,
+        view: _DashboardView,
+        current: PlayerGoal | None,
     ) -> None:
         super().__init__()
         self._view = view
@@ -598,7 +777,8 @@ class _EditGoalModal(discord.ui.Modal, title="✏️ Modifier mon objectif"):
             attacks = int(str(self.target_attacks))
         except ValueError:
             await interaction.response.send_message(
-                "Les valeurs numériques sont invalides.", ephemeral=True,
+                "Les valeurs numériques sont invalides.",
+                ephemeral=True,
             )
             return
         attacks = max(1, min(8, attacks))
@@ -611,7 +791,8 @@ class _EditGoalModal(discord.ui.Modal, title="✏️ Modifier mon objectif"):
         await self._view._repo.upsert_goal(goal)  # noqa: SLF001
         await self._view.refresh()
         await interaction.response.edit_message(
-            embed=self._view.current_embed, view=self._view,
+            embed=self._view.current_embed,
+            view=self._view,
         )
 
 
@@ -619,11 +800,14 @@ class _EditGoalModal(discord.ui.Modal, title="✏️ Modifier mon objectif"):
 # Comparison embed
 # ─────────────────────────────────────────────────────────────────────────────
 def _render_compare(
-    name_a: str, snap_a: LegendSnapshot,
-    name_b: str, snap_b: LegendSnapshot,
+    name_a: str,
+    snap_a: LegendSnapshot,
+    name_b: str,
+    snap_b: LegendSnapshot,
 ) -> discord.Embed:
     embed = discord.Embed(
-        title=f"⚔️ {name_a} vs {name_b}", color=COLOR_INFO,
+        title=f"⚔️ {name_a} vs {name_b}",
+        color=COLOR_INFO,
     )
 
     def _pair(label: str, a: int, b: int, fmt: str = "{}") -> None:
@@ -695,6 +879,7 @@ def _setup_success_embed(
     display_name: str,
     tag: str,
     trial_was_fresh: bool,
+    trial_days: int,
     api_tier: LeagueType | None,
 ) -> discord.Embed:
     embed = discord.Embed(
@@ -704,7 +889,7 @@ def _setup_success_embed(
     )
     if trial_was_fresh:
         embed.add_field(
-            name="🎁 Essai Premium 7 jours",
+            name=f"🎁 Essai Premium ({trial_days} j)",
             value=(
                 "Activé automatiquement : `/ping` illimité, jusqu'à 3 comptes, "
                 "accès complet aux commandes coaching."
@@ -749,7 +934,10 @@ class _TierSelectView(discord.ui.View):
         super().__init__(timeout=120.0)
         self.add_item(
             _TierSelect(
-                repo, owner_id, tag, preselected,
+                repo,
+                owner_id,
+                tag,
+                preselected,
                 enable_digest_default=enable_digest_default,
             ),
         )
@@ -789,7 +977,9 @@ class _TierSelect(discord.ui.Select[discord.ui.View]):
         ]
         super().__init__(
             placeholder="Sélectionne ton tier Legend",
-            min_values=1, max_values=1, options=options,
+            min_values=1,
+            max_values=1,
+            options=options,
         )
         self._repo = repo
         self._owner = owner_id
@@ -807,7 +997,8 @@ class _TierSelect(discord.ui.Select[discord.ui.View]):
             tier = LeagueType(int(self.values[0]))
         except (ValueError, KeyError):
             await interaction.response.send_message(
-                "❌ Tier invalide.", ephemeral=True,
+                "❌ Tier invalide.",
+                ephemeral=True,
             )
             return
         await self._repo.set_legend_tier(self._tag, tier)
@@ -822,10 +1013,77 @@ class _TierSelect(discord.ui.Select[discord.ui.View]):
                 "tu recevras par DM l'équivalent de `/daily`, `/predict` et `/score` "
                 "pour tes comptes liés. Règle avec `/digest`."
             )
+        # Legend I only: ask the season-end trophy goal right away (helps onboarding).
+        if tier is LeagueType.LEGEND_I:
+            await interaction.response.send_modal(
+                _SetupLegendIGoalModal(
+                    repo=self._repo,
+                    tag=self._tag,
+                    owner_id=self._owner,
+                    digest_line=digest_line,
+                )
+            )
+            return
         await interaction.response.send_message(
             f"✅ Tier `{self._tag}` enregistré : **{_tier_label(tier)}**."
             f"{digest_line}\n"
             f"Tu peux toujours changer le tier avec `/tier tag:{self._tag}`.",
+            ephemeral=True,
+        )
+
+
+class _SetupLegendIGoalModal(discord.ui.Modal, title="🎯 Objectif fin de saison (Légende I)"):
+    target_trophies: discord.ui.TextInput[discord.ui.Modal] = discord.ui.TextInput(
+        label="Objectif trophées (fin de saison)",
+        placeholder="Ex: 6200",
+        required=True,
+        max_length=5,
+    )
+
+    def __init__(
+        self,
+        *,
+        repo: Repository,
+        tag: str,
+        owner_id: int,
+        digest_line: str,
+    ) -> None:
+        super().__init__()
+        self._repo = repo
+        self._tag = tag
+        self._owner_id = owner_id
+        self._digest_line = digest_line
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self._owner_id:
+            await interaction.response.send_message(
+                "❌ Seul le propriétaire du compte peut définir cet objectif.",
+                ephemeral=True,
+            )
+            return
+        try:
+            trophies = int(str(self.target_trophies).strip())
+        except ValueError:
+            await interaction.response.send_message(
+                "❌ Objectif trophées invalide (nombre attendu).",
+                ephemeral=True,
+            )
+            return
+        trophies = max(0, trophies)
+        # Legend I: attacks/day quota is always 8, so we store a sensible default.
+        await self._repo.upsert_goal(
+            PlayerGoal(
+                player_tag=self._tag,
+                target_trophies=trophies,
+                target_attacks_per_day=8,
+                notes="",
+            )
+        )
+        await interaction.response.send_message(
+            f"✅ Tier `{self._tag}` enregistré : **Légende I**.\n"
+            f"🎯 Objectif fin de saison : **{trophies}** trophées.\n"
+            f"{self._digest_line}\n"
+            f"Tu peux modifier cet objectif plus tard via `/dashboard` → **Objectifs**.",
             ephemeral=True,
         )
 
@@ -882,8 +1140,7 @@ def _trophy_sparkline(snapshots: list[LegendSnapshot]) -> str:
         return blocks[0] * len(values)
     span = hi - lo
     return "".join(
-        blocks[min(len(blocks) - 1, round((v - lo) / span * (len(blocks) - 1)))]
-        for v in values
+        blocks[min(len(blocks) - 1, round((v - lo) / span * (len(blocks) - 1)))] for v in values
     )
 
 

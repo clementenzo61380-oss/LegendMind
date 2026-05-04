@@ -1,4 +1,5 @@
 """Guild-level configuration (étape 6) + assistant `/admin setup` (étapes UI)."""
+
 from __future__ import annotations
 
 from dataclasses import replace
@@ -61,8 +62,7 @@ class SetupStepLeague(discord.ui.View):
         embed = discord.Embed(
             title="✅ Configuration enregistrée",
             description=(
-                "Salons et rôles sont enregistrés. "
-                "Tu peux affiner avec `/serveur_config`."
+                "Salons et rôles sont enregistrés. Tu peux affiner avec `/serveur_config`."
             ),
             color=COLOR_INFO,
         )
@@ -202,7 +202,8 @@ class GuildAdminCog(commands.Cog):
     async def voir(self, interaction: discord.Interaction) -> None:
         if interaction.guild_id is None:
             await interaction.response.send_message(
-                "Sur un serveur seulement.", ephemeral=True,
+                "Sur un serveur seulement.",
+                ephemeral=True,
             )
             return
         cfg = await self._repo.get_guild_config(interaction.guild_id)
@@ -237,7 +238,8 @@ class GuildAdminCog(commands.Cog):
     ) -> None:
         if interaction.guild_id is None:
             await interaction.response.send_message(
-                "Sur un serveur seulement.", ephemeral=True,
+                "Sur un serveur seulement.",
+                ephemeral=True,
             )
             return
         cur = await self._repo.get_guild_config(interaction.guild_id)

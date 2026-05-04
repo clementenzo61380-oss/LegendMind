@@ -2,6 +2,7 @@
 
 Renders a `NotebookReport` as an embed with a trend graph button.
 """
+
 from __future__ import annotations
 
 import logging
@@ -37,9 +38,7 @@ class NotebookCog(commands.Cog):
         description="Affiche ton Carnet d'Erreurs hebdomadaire.",
     )
     @app_commands.describe(
-        semaine_offset=(
-            "0 = semaine en cours, 1 = semaine dernière, etc. (défaut : 0)"
-        ),
+        semaine_offset=("0 = semaine en cours, 1 = semaine dernière, etc. (défaut : 0)"),
     )
     async def carnet(
         self,
@@ -50,7 +49,8 @@ class NotebookCog(commands.Cog):
         tag = await self._resolve_player_tag(interaction.user.id)
         if tag is None:
             await interaction.followup.send(
-                "Aucun compte CoC lié. Utilise `/lier` d'abord.", ephemeral=True,
+                "Aucun compte CoC lié. Utilise `/setup` d'abord.",
+                ephemeral=True,
             )
             return
 
@@ -102,9 +102,7 @@ def _render_report(report: NotebookReport) -> discord.Embed:
         )
 
     if report.recommendations:
-        numbered = "\n".join(
-            f"{i + 1}. {r}" for i, r in enumerate(report.recommendations)
-        )
+        numbered = "\n".join(f"{i + 1}. {r}" for i, r in enumerate(report.recommendations))
         embed.add_field(
             name="Recommandations",
             value=numbered,
@@ -131,7 +129,9 @@ class _NotebookView(discord.ui.View):
     """Buttons attached to the carnet embed."""
 
     def __init__(
-        self, notebook: ErrorNotebookService, player_tag: str,
+        self,
+        notebook: ErrorNotebookService,
+        player_tag: str,
     ) -> None:
         super().__init__(timeout=180.0)
         self._notebook = notebook
@@ -160,6 +160,5 @@ def _render_trend(values: list[float]) -> str:
         return "(aucune donnée)"
     blocks = "▁▂▃▄▅▆▇█"
     return "".join(
-        blocks[min(len(blocks) - 1, max(0, round(v * (len(blocks) - 1))))]
-        for v in values
+        blocks[min(len(blocks) - 1, max(0, round(v * (len(blocks) - 1))))] for v in values
     )

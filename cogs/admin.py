@@ -9,6 +9,7 @@ Deux ergonomies cohabitent :
 Chaque commande vérifie les droits via :func:`_is_operator` (propriétaire
 du serveur, `manage_guild`, ou rôle `admin_role_id`).
 """
+
 from __future__ import annotations
 
 import logging
@@ -89,8 +90,7 @@ class AdminCog(commands.Cog):
             s = await self._metrics.summary()
             lat = round(self.bot.latency * 1000.0, 1)
             await interaction.followup.send(
-                f"Uptime {s['uptime_s']}s · WS {lat}ms · "
-                f"p95 poll {s['p95_latency_ms']}ms",
+                f"Uptime {s['uptime_s']}s · WS {lat}ms · p95 poll {s['p95_latency_ms']}ms",
                 ephemeral=True,
             )
             return
@@ -143,7 +143,9 @@ class AdminCog(commands.Cog):
     )
     @app_commands.describe(tag="Tag CoC du joueur")
     async def admin_reset_cooldowns(
-        self, interaction: discord.Interaction, tag: str,
+        self,
+        interaction: discord.Interaction,
+        tag: str,
     ) -> None:
         await self._reset_cooldowns_impl(interaction, tag)
 
@@ -161,7 +163,8 @@ class AdminCog(commands.Cog):
     async def admin_op_setup(self, interaction: discord.Interaction) -> None:
         if interaction.guild_id is None:
             await interaction.response.send_message(
-                "Sur un serveur seulement.", ephemeral=True,
+                "Sur un serveur seulement.",
+                ephemeral=True,
             )
             return
         cfg = await self._repo.get_guild_config(interaction.guild_id)
@@ -195,7 +198,9 @@ class AdminCog(commands.Cog):
     @admin.command(name="reset-cooldowns", description="Vide les cooldowns d'alerte d'un joueur.")
     @app_commands.describe(tag="Tag CoC du joueur")
     async def admin_op_reset(
-        self, interaction: discord.Interaction, tag: str,
+        self,
+        interaction: discord.Interaction,
+        tag: str,
     ) -> None:
         await self._reset_cooldowns_impl(interaction, tag)
 
@@ -227,7 +232,8 @@ class AdminCog(commands.Cog):
             cfg = replace(cfg, leaderboard_channel_id=salon.id)
         await self._repo.upsert_guild_config(cfg)
         await interaction.response.send_message(
-            f"✅ {kind.value} → {salon.mention}", ephemeral=True,
+            f"✅ {kind.value} → {salon.mention}",
+            ephemeral=True,
         )
 
     @admin.command(
@@ -262,7 +268,8 @@ class AdminCog(commands.Cog):
             cfg = replace(cfg, legend_role_iii_id=role.id)
         await self._repo.upsert_guild_config(cfg)
         await interaction.response.send_message(
-            f"✅ {slot.value} → {role.mention}", ephemeral=True,
+            f"✅ {slot.value} → {role.mention}",
+            ephemeral=True,
         )
 
     # ── shared implementations ───────────────────────────────────────────
@@ -283,7 +290,9 @@ class AdminCog(commands.Cog):
         )
 
     async def _force_poll_impl(
-        self, interaction: discord.Interaction, tag: str | None,
+        self,
+        interaction: discord.Interaction,
+        tag: str | None,
     ) -> None:
         if interaction.guild_id is None:
             await interaction.response.send_message("Serveur requis.", ephemeral=True)
@@ -297,29 +306,34 @@ class AdminCog(commands.Cog):
             resolved = await self._repo.get_first_active_tag(interaction.user.id)
         if not resolved:
             await interaction.response.send_message(
-                "Aucun tag : passe `tag` ou lie `/lier`.", ephemeral=True,
+                "Aucun tag : passe `tag` ou lie `/setup`.",
+                ephemeral=True,
             )
             return
         nt = _normalise_tag(resolved)
         target = await self._repo.get_poll_target(nt)
         if target is None:
             await interaction.response.send_message(
-                f"Tag `{nt}` introuvable ou inactif.", ephemeral=True,
+                f"Tag `{nt}` introuvable ou inactif.",
+                ephemeral=True,
             )
             return
-        try:
-            self._poller.enqueue_immediate(target)
-        except Exception as exc:  # noqa: BLE001
+        ok = self._poller.enqueue_immediate(target)
+        if not ok:
             await interaction.response.send_message(
-                f"File pleine : `{exc!s}`", ephemeral=True,
+                "❌ File de poll pleine — réessaie dans quelques secondes.",
+                ephemeral=True,
             )
             return
         await interaction.response.send_message(
-            f"Poll forcé pour `{nt}`.", ephemeral=True,
+            f"✅ Poll forcé pour `{nt}`.",
+            ephemeral=True,
         )
 
     async def _reset_cooldowns_impl(
-        self, interaction: discord.Interaction, tag: str,
+        self,
+        interaction: discord.Interaction,
+        tag: str,
     ) -> None:
         if interaction.guild_id is None:
             await interaction.response.send_message("Serveur requis.", ephemeral=True)

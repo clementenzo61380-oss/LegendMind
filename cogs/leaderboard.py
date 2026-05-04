@@ -1,6 +1,8 @@
 """Leaderboard + métriques joueur (services/leaderboard + cache)."""
+
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import replace
 from datetime import timedelta
@@ -98,7 +100,10 @@ class LeaderboardCog(commands.Cog):
 
     @_refresh_auto_leaderboards.before_loop
     async def _before_refresh_loop(self) -> None:
-        await self.bot.wait_until_ready()
+        try:
+            await self.bot.wait_until_ready()
+        except (asyncio.CancelledError, RuntimeError):
+            return
 
     async def _push_leaderboard_to_channel(self, guild_id: int) -> None:
         cfg = await self._repo.get_guild_config(guild_id)
@@ -143,7 +148,8 @@ class LeaderboardCog(commands.Cog):
     ) -> None:
         if interaction.guild_id is None:
             await interaction.response.send_message(
-                "Utilisable seulement sur un serveur.", ephemeral=True,
+                "Utilisable seulement sur un serveur.",
+                ephemeral=True,
             )
             return
 
@@ -178,14 +184,16 @@ class LeaderboardCog(commands.Cog):
     async def mvp_semaine(self, interaction: discord.Interaction) -> None:
         if interaction.guild_id is None:
             await interaction.response.send_message(
-                "Sur un serveur seulement.", ephemeral=True,
+                "Sur un serveur seulement.",
+                ephemeral=True,
             )
             return
         await interaction.response.defer(ephemeral=True)
         mvp = await self._lb.get_weekly_mvp(interaction.guild_id)
         if mvp is None:
             await interaction.followup.send(
-                "Pas assez de données pour un MVP.", ephemeral=True,
+                "Pas assez de données pour un MVP.",
+                ephemeral=True,
             )
             return
         embed = discord.Embed(
@@ -209,7 +217,8 @@ class LeaderboardCog(commands.Cog):
         tag = await self._repo.get_first_active_tag(interaction.user.id)
         if tag is None:
             await interaction.followup.send(
-                "Aucun compte CoC lié. Utilise `/lier` d'abord.", ephemeral=True,
+                "Aucun compte CoC lié. Utilise `/setup` d'abord.",
+                ephemeral=True,
             )
             return
 
