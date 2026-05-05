@@ -83,8 +83,18 @@ class DailyLegendExportService:
         for tag, name in players:
             start_snap = await self._repo.get_latest_snapshot_before(tag, window.start_utc)
             end_snap = await self._repo.get_latest_snapshot_before(tag, window.end_utc)
-            n_def = await self._repo.count_defenses_between(tag, window.start_utc, window.end_utc)
-            row = compute_legend_day_stats(tag, name, window, start_snap, end_snap, n_def)
+            n_def, sum_lost = await self._repo.aggregate_defenses_between(
+                tag, window.start_utc, window.end_utc
+            )
+            row = compute_legend_day_stats(
+                tag,
+                name,
+                window,
+                start_snap,
+                end_snap,
+                n_def,
+                defense_trophies_lost=sum_lost,
+            )
             if row is not None:
                 rows.append(row)
 

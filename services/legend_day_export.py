@@ -44,7 +44,10 @@ class LegendDayStats:
     attacks: int
     defenses: int
     net_battles: int
+    trophies_attack: int
+    trophies_defense: int
     net_trophies: int
+    trophies_start: int
     trophies_end: int
 
 
@@ -55,6 +58,7 @@ def compute_legend_day_stats(
     start_snap: LegendSnapshot | None,
     end_snap: LegendSnapshot | None,
     defense_count: int,
+    defense_trophies_lost: int = 0,
 ) -> LegendDayStats | None:
     """Agrège attaques, défenses (log), net trophées et trophées finaux pour une fenêtre.
 
@@ -69,9 +73,11 @@ def compute_legend_day_stats(
     if start_snap is not None:
         attacks = max(0, end_snap.attacks_done - start_snap.attacks_done)
         net_trophies = end_snap.trophies - start_snap.trophies
+        atk_trophies = max(0, end_snap.trophies_gained - start_snap.trophies_gained)
     else:
         attacks = max(0, end_snap.attacks_done)
         net_trophies = end_snap.trophies_gained - end_snap.trophies_lost
+        atk_trophies = max(0, end_snap.trophies_gained)
 
     return LegendDayStats(
         player_tag=tag,
@@ -80,6 +86,9 @@ def compute_legend_day_stats(
         attacks=attacks,
         defenses=defense_count,
         net_battles=attacks - defense_count,
+        trophies_attack=atk_trophies,
+        trophies_defense=-max(0, defense_trophies_lost),
         net_trophies=net_trophies,
+        trophies_start=start_snap.trophies if start_snap is not None else end_snap.trophies - net_trophies,
         trophies_end=end_snap.trophies,
     )

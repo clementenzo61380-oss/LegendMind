@@ -14,8 +14,10 @@ _HEADERS: tuple[str, ...] = (
     "Nom",
     "Attaques",
     "Défenses",
-    "Attaques - Défenses",
-    "Trophées net",
+    "ATK TR",
+    "DEF TR",
+    "+/- TR",
+    "INIT TR",
     "Trophées fin journée",
 )
 
@@ -39,8 +41,10 @@ def append_legend_day_rows(path: Path, rows: list[LegendDayStats]) -> None:
                 r.player_name or "",
                 r.attacks,
                 r.defenses,
-                r.net_battles,
+                r.trophies_attack,
+                r.trophies_defense,
                 r.net_trophies,
+                r.trophies_start,
                 r.trophies_end,
             ],
         )
