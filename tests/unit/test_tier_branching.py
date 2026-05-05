@@ -84,11 +84,11 @@ def test_current_week_window_keeps_only_this_iso_week() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# weekly_attacks_used — daily resets summed across the week.
+# weekly_attacks_used — Legend II/III weekly proxy.
 # ─────────────────────────────────────────────────────────────────────────────
-def test_weekly_attacks_used_sums_per_day_max() -> None:
-    """``attacks_done`` reset chaque jour côté API CoC ; on somme le max
-    par jour pour reconstruire le total hebdo (Legend II/III)."""
+def test_weekly_attacks_used_uses_delta_from_week_baseline() -> None:
+    """For Legend II/III we store a season-cumulative proxy (attack_wins) and
+    compute weekly usage as delta since the earliest snapshot in the week."""
     now = datetime.now(timezone.utc)
     monday = (now - timedelta(days=now.weekday())).replace(
         hour=0,
@@ -97,13 +97,12 @@ def test_weekly_attacks_used_sums_per_day_max() -> None:
         microsecond=0,
     )
     week = [
-        _snap(monday + timedelta(hours=12), 5500, 3),  # mardi 3 attaques
-        _snap(monday + timedelta(days=1, hours=10), 5510, 2),  # peak du jour 2 → 2
-        _snap(monday + timedelta(days=1, hours=23), 5510, 5),  # max du jour 2 = 5
-        _snap(monday + timedelta(days=2, hours=8), 5520, 4),  # jour 3 → 4
+        _snap(monday + timedelta(hours=12), 5500, 10),
+        _snap(monday + timedelta(days=1, hours=23), 5510, 11),
+        _snap(monday + timedelta(days=2, hours=8), 5520, 12),
     ]
-    used = weekly_attacks_used(week, latest_attacks_done=4)
-    assert used == 3 + 5 + 4  # = 12
+    used = weekly_attacks_used(week, latest_attacks_done=12)
+    assert used == 2  # 12 - baseline(10)
 
 
 def test_weekly_attacks_used_falls_back_to_latest_when_empty_window() -> None:

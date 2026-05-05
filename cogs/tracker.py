@@ -397,11 +397,19 @@ class LegendPoller(commands.Cog):
         from ``players.legend_tier`` — NOT inferred from trophies. Falls
         back to ``UNKNOWN`` when the user hasn't declared yet.
         """
-        ls = player.legend_statistics
-        attacks_done = getattr(ls, "current_season", None)
-        attacks = getattr(attacks_done, "num_attacks", 0) if attacks_done else 0
-        gained = getattr(attacks_done, "trophies_gained", 0) if attacks_done else 0
-        lost = getattr(attacks_done, "trophies_lost", 0) if attacks_done else 0
+        # Legend I: use legendStatistics.currentSeason (daily ladder stats).
+        # Legend II/III: API doesn't expose tournament battles in legendStatistics;
+        # use season-cumulative attackWins/defenseWins as a proxy for weekly usage.
+        if tier is LeagueType.LEGEND_I:
+            ls = player.legend_statistics
+            attacks_done = getattr(ls, "current_season", None)
+            attacks = getattr(attacks_done, "num_attacks", 0) if attacks_done else 0
+            gained = getattr(attacks_done, "trophies_gained", 0) if attacks_done else 0
+            lost = getattr(attacks_done, "trophies_lost", 0) if attacks_done else 0
+        else:
+            attacks = getattr(player, "attack_wins", 0) or 0
+            gained = 0
+            lost = 0
 
         return LegendSnapshot(
             player_tag=player.tag,

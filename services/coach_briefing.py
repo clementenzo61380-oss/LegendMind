@@ -466,15 +466,16 @@ def weekly_attacks_used(
     week: list[LegendSnapshot],
     latest_attacks_done: int,
 ) -> int:
+    """Estimate weekly battles used for Legend II/III.
+
+    For non-Legend-I tiers, the official API does not expose a true "attacks done" counter.
+    We therefore store `attacks_done` as a season-cumulative proxy (currently: attack_wins),
+    and compute the weekly usage as delta since the earliest snapshot in the week window.
+    """
     if not week:
         return latest_attacks_done
-    by_day: dict[object, int] = {}
-    for snap in week:
-        day = snap.captured_at.astimezone(timezone.utc).date()
-        existing = by_day.get(day, 0)
-        if snap.attacks_done > existing:
-            by_day[day] = snap.attacks_done
-    return sum(by_day.values())
+    baseline = min(s.attacks_done for s in week)
+    return max(0, latest_attacks_done - baseline)
 
 
 def weekly_consistency(
