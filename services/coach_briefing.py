@@ -63,6 +63,20 @@ def daily_embed_legend_i(
             ),
             inline=False,
         )
+
+    # Season daily logs (like ClashPerk): DAY / ATK / DEF / +/- / INIT / FINAL
+    season_rows = season_day_rows(snapshots, now_utc=latest.captured_at)
+    if season_rows:
+        lines = ["DAY  ATK   DEF   +/-   INIT  FINAL"]
+        for r in season_rows[-15:]:
+            lines.append(
+                f"{r['day']:>2}  {r['atk']:>+4}  {r['def']:>+4}  {r['net']:>+4}  {r['init']:>4}  {r['final']:>4}"
+            )
+        embed.add_field(
+            name=f"📅 Legend Season Logs ({season_rows[-1]['season_id']})",
+            value="```" + "\n".join(lines) + "```",
+            inline=False,
+        )
     yesterday = yesterday_window(latest.captured_at, snapshots)
     if yesterday is not None:
         delta_t, attacks_y = yesterday
@@ -354,6 +368,67 @@ def next_reset_utc() -> datetime:
         microsecond=0,
     )
     return today_reset if today_reset > now else today_reset + timedelta(days=1)
+
+
+def _month_season_id(dt_utc: datetime) -> str:
+    """Season bucket like 'YYYY-MM' (monthly Legend season)."""
+    return dt_utc.strftime("%Y-%m")
+
+
+def season_day_rows(
+    snapshots: list[LegendSnapshot],
+    *,
+    now_utc: datetime | None = None,
+) -> list[dict[str, int | str]]:
+    """Build per-day season log rows from snapshots (UTC, daily reset boundary ignored).
+
+    Uses the first/last snapshot per day to compute:
+    - atk = Δ trophies_gained (cumulative)
+    - def = Δ trophies_lost (cumulative)
+    - init/final trophies and net diff
+    """
+    if not snapshots:
+        return []
+    snaps = sorted(snapshots, key=lambda s: s.captured_at)
+    now = (now_utc or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    season_id = _month_season_id(now)
+    # Keep only current season month.
+    snaps = [s for s in snaps if _month_season_id(s.captured_at.astimezone(timezone.utc)) == season_id]
+    if len(snaps) < 2:
+        return []
+    by_day: dict[object, list[LegendSnapshot]] = {}
+    for s in snaps:
+        day = s.captured_at.astimezone(timezone.utc).date()
+        by_day.setdefault(day, []).append(s)
+
+    rows: list[dict[str, int | str]] = []
+    for day in sorted(by_day.keys()):
+        day_snaps = sorted(by_day[day], key=lambda s: s.captured_at)
+        if len(day_snaps) < 2:
+            continue
+        first, last = day_snaps[0], day_snaps[-1]
+        atk = last.trophies_gained - first.trophies_gained
+        deff = last.trophies_lost - first.trophies_lost
+        # Guard season rollover / counter reset: skip negative deltas.
+        if atk < 0:
+            atk = 0
+        if deff < 0:
+            deff = 0
+        init_t = first.trophies
+        final_t = last.trophies
+        net = final_t - init_t
+        rows.append(
+            {
+                "season_id": season_id,
+                "day": int(day.day),
+                "atk": int(atk),
+                "def": int(-deff),
+                "net": int(net),
+                "init": int(init_t),
+                "final": int(final_t),
+            }
+        )
+    return rows
 
 
 def yesterday_window(
