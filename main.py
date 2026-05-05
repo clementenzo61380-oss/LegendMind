@@ -86,6 +86,27 @@ async def _purge_global_slash_commands(bot: commands.Bot) -> None:
     )
 
 
+async def _purge_guild_slash_commands(bot: commands.Bot) -> None:
+    """Delete all guild app commands for every connected guild."""
+    log = logging.getLogger("legendmind.main")
+    for guild in bot.guilds:
+        try:
+            remote = await bot.tree.fetch_commands(guild=guild)
+            log.warning(
+                "Purging GUILD slash commands for %s (%d): remote=%d",
+                guild.name,
+                guild.id,
+                len(remote),
+            )
+            bot.tree.clear_commands(guild=guild)
+            await bot.tree.sync(guild=guild)  # sync empty -> deletes
+            # Re-seed from local global tree and sync once.
+            bot.tree.copy_global_to(guild=guild)
+            await bot.tree.sync(guild=guild)
+        except Exception:  # noqa: BLE001
+            log.exception("Guild command purge failed for %s", guild.id)
+
+
 async def _discord_wait_ready(bot: discord.Client, loop_name: str) -> None:
     """Guard wait_until_ready for shutdown races / cancel during login.
 
@@ -395,6 +416,9 @@ async def _run(config: Config) -> None:  # noqa: PLR0915 — entry point wiring 
                 await _purge_global_slash_commands(bot)
             except Exception:  # noqa: BLE001
                 log.exception("Global command purge failed")
+
+        if config.slash_purge_guild:
+            await _purge_guild_slash_commands(bot)
 
         # Evidence: what Discord thinks exists, before/after sync.
         try:

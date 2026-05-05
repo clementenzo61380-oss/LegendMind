@@ -151,6 +151,9 @@ class Config:
     # One-shot maintenance: when True, delete all GLOBAL commands on startup
     # (useful after switching from global->guild to remove "duplicates").
     slash_purge_global: bool = False
+    # One-shot maintenance: when True, delete all GUILD commands on startup
+    # and re-sync from the local tree (useful when Discord shows duplicates in-guild).
+    slash_purge_guild: bool = False
 
     # Billing (Stripe). All optional — when absent, /premium and the webhook
     # server are disabled and the bot still works as Free-only.
@@ -199,6 +202,7 @@ def load_config() -> Config:
         alert_cooldown_default_seconds=_int("ALERT_COOLDOWN_DEFAULT_SECONDS", 3600),
         slash_sync_mode=os.environ.get("SLASH_SYNC_MODE", "both").strip().lower(),
         slash_purge_global=_bool("SLASH_PURGE_GLOBAL", False),
+        slash_purge_guild=_bool("SLASH_PURGE_GUILD", False),
         stripe_api_key=_opt("STRIPE_API_KEY"),
         stripe_webhook_secret=_opt("STRIPE_WEBHOOK_SECRET"),
         stripe_price_id_monthly=_opt("STRIPE_PRICE_ID_MONTHLY"),
