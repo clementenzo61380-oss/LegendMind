@@ -24,6 +24,7 @@ from cogs.tracker import LegendPoller
 from constants import COLOR_INFO, LeagueType
 from models import GuildConfig
 from services.db import Repository
+from services.discord_interactions import defer_ephemeral_safe
 from services.metrics_collector import MetricsCollector
 
 log = logging.getLogger(__name__)
@@ -113,6 +114,43 @@ class AdminCog(commands.Cog):
                 f"**p50 / p95 poll** : {s['p50_latency_ms']} / "
                 f"{s['p95_latency_ms']} ms\n"
                 f"**RSS** : ~{s['rss_mb']} MiB"
+            ),
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @app_commands.command(
+        name="bot_usage",
+        description=(
+            "Statistiques d’usage (utilisateurs, comptes liés). "
+            "Propriétaire de l’application Discord uniquement."
+        ),
+    )
+    async def slash_bot_usage(self, interaction: discord.Interaction) -> None:
+        if not await defer_ephemeral_safe(interaction, log_label="cmd=/bot_usage"):
+            return
+        if not await self.bot.is_owner(interaction.user):
+            await interaction.followup.send(
+                "Réservé au **propriétaire** de l’application sur le portail développeur.",
+                ephemeral=True,
+            )
+            return
+        counts = await self._repo.get_global_usage_counts()
+        n_guilds = len(self.bot.guilds)
+        embed = discord.Embed(
+            title="📊 Usage LegendMind",
+            color=COLOR_INFO,
+            description=(
+                f"**Utilisateurs Discord** (≥ 1 compte CoC lié actif) : "
+                f"**{counts['discord_users']}**\n"
+                f"**Comptes CoC actifs** (tags suivis) : "
+                f"**{counts['active_accounts']}**\n"
+                f"**Serveurs** où le bot est installé : **{n_guilds}**\n"
+                f"**Serveurs avec au moins un lien** (guild en base) : "
+                f"**{counts['servers_with_links']}**\n"
+                f"**Premium actif** (période Stripe/trial en cours) : "
+                f"**{counts['premium_active']}**\n"
+                "\n_Un même Discord peut avoir plusieurs tags → "
+                "« comptes » ≥ « utilisateurs »._"
             ),
         )
         await interaction.followup.send(embed=embed, ephemeral=True)

@@ -68,7 +68,7 @@ def daily_embed_legend_i(
     season_rows = season_day_rows(snapshots, now_utc=latest.captured_at)
     if season_rows:
         lines = ["DAY  ATK   DEF   +/-   INIT  FINAL"]
-        for r in season_rows[-15:]:
+        for r in season_rows:
             lines.append(
                 f"{r['day']:>2}  {r['atk']:>+4}  {r['def']:>+4}  {r['net']:>+4}  {r['init']:>4}  {r['final']:>4}"
             )
