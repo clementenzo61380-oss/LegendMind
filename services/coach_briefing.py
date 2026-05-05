@@ -27,6 +27,9 @@ def daily_embed_legend_i(
     tag: str,
     latest: LegendSnapshot,
     snapshots: list[LegendSnapshot],
+    *,
+    defenses_today: int | None = None,
+    avg_defense_loss_today: float | None = None,
 ) -> discord.Embed:
     quota = get_tuning().legend_i_daily_attack_quota
     embed = discord.Embed(
@@ -44,6 +47,22 @@ def daily_embed_legend_i(
         value=f"{remaining}/{quota}",
         inline=True,
     )
+    if latest.attacks_done > 0:
+        avg_atk = latest.trophies_gained / max(1, latest.attacks_done)
+        def_line = (
+            f"{avg_defense_loss_today:.1f}"
+            if avg_defense_loss_today is not None and defenses_today is not None and defenses_today > 0
+            else "—"
+        )
+        def_n = defenses_today if defenses_today is not None else 0
+        embed.add_field(
+            name="📈 Moyennes (aujourd'hui)",
+            value=(
+                f"Attaque : **{avg_atk:.1f}** TR/attaque\n"
+                f"Défense : **{def_line}** TR/défense ({def_n} déf.)"
+            ),
+            inline=False,
+        )
     yesterday = yesterday_window(latest.captured_at, snapshots)
     if yesterday is not None:
         delta_t, attacks_y = yesterday

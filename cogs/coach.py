@@ -35,6 +35,7 @@ from models import LegendSnapshot
 from services import coach_briefing as briefing
 from services.db import Repository
 from services.debug_ndjson import debug_ndjson
+from services.game_tuning import get_tuning
 from services.discord_interactions import defer_ephemeral_safe
 from services.logic import legend_consistency_score
 from services.rank_predictor import RankPredictor
@@ -90,7 +91,20 @@ class CoachCog(commands.Cog):
             t_db = time.perf_counter()
             snapshots = await self._repo.get_snapshots_since(tag, since)
             log.info("cmd=/daily db.get_snapshots_since %.0fms n=%d", (time.perf_counter() - t_db) * 1000.0, len(snapshots))
-            embed = briefing.daily_embed_legend_i(tag, latest, snapshots)
+            # Defense averages: derived from defense_log since last daily reset.
+            now = datetime.now(timezone.utc)
+            reset_hour = get_tuning().legend_daily_reset_hour_utc
+            reset_today = now.replace(hour=reset_hour, minute=0, second=0, microsecond=0)
+            reset_start = reset_today if reset_today <= now else reset_today - timedelta(days=1)
+            n_def, sum_lost = await self._repo.aggregate_defenses_between(tag, reset_start, now)
+            avg_def = (sum_lost / n_def) if n_def > 0 else None
+            embed = briefing.daily_embed_legend_i(
+                tag,
+                latest,
+                snapshots,
+                defenses_today=n_def,
+                avg_defense_loss_today=avg_def,
+            )
         else:
             since = datetime.now(timezone.utc) - timedelta(days=8)
             t_db = time.perf_counter()

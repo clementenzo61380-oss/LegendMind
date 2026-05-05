@@ -314,31 +314,7 @@ class AlertManager:
                 )
             )
 
-        # Streaks: read recent snapshots and check sign-consistency.
-        streak = await self._detect_streak(current.player_tag)
-        if streak == AlertType.STREAK_POSITIVE:
-            out.append(
-                self._build(
-                    streak,
-                    current.player_tag,
-                    owner,
-                    description=(
-                        f"{ALERT_STREAK_LENGTH} attaques gagnantes consécutives. Continue !"
-                    ),
-                )
-            )
-        elif streak == AlertType.STREAK_NEGATIVE:
-            out.append(
-                self._build(
-                    streak,
-                    current.player_tag,
-                    owner,
-                    description=(
-                        f"{ALERT_STREAK_LENGTH} défenses perdantes consécutives. "
-                        "Pense à attaquer pour casser le cycle."
-                    ),
-                )
-            )
+        # Streaks disabled: too spammy / not actionable compared to other alerts.
 
         # 24h comeback.
         if await self._detect_comeback(current):
@@ -602,10 +578,6 @@ def _build_embed(alert: Alert) -> discord.Embed:
     )
     if alert.cta:
         embed.add_field(name="​", value=f"➡️ {alert.cta}", inline=False)
-    next_reset = _next_reset_utc()
-    embed.set_footer(
-        text=f"Prochain reset Legend : {next_reset.strftime('%H:%M UTC')}",
-    )
     return embed
 
 

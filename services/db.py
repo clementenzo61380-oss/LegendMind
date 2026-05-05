@@ -590,6 +590,37 @@ class Repository:
         )
         return [(r["tag"], r["name"]) for r in rows]
 
+    async def get_global_usage_counts(self) -> dict[str, int]:
+        """Agrégats pour le propriétaire du bot : utilisateurs, comptes, serveurs.
+
+        - ``discord_users`` : Discord distincts avec au moins un tag actif.
+        - ``active_accounts`` : lignes ``players`` actives (un user peut en avoir plusieurs).
+        - ``servers_with_links`` : ``guild_id`` distincts non nuls parmi les joueurs actifs.
+        - ``premium_active`` : abonnements avec ``current_period_end`` dans le futur.
+        """
+        row = await self._db.pool.fetchrow(
+            f"""
+            SELECT
+              (SELECT COUNT(DISTINCT discord_user_id)::bigint
+                 FROM {TBL_PLAYERS} WHERE is_active = TRUE) AS discord_users,
+              (SELECT COUNT(*)::bigint
+                 FROM {TBL_PLAYERS} WHERE is_active = TRUE) AS active_accounts,
+              (SELECT COUNT(DISTINCT guild_id)::bigint
+                 FROM {TBL_PLAYERS}
+                 WHERE is_active = TRUE AND guild_id IS NOT NULL) AS servers_with_links,
+              (SELECT COUNT(*)::bigint FROM {TBL_SUBSCRIPTIONS}
+                 WHERE current_period_end IS NOT NULL
+                   AND current_period_end > NOW()) AS premium_active
+            """,
+        )
+        assert row is not None
+        return {
+            "discord_users": int(row["discord_users"] or 0),
+            "active_accounts": int(row["active_accounts"] or 0),
+            "servers_with_links": int(row["servers_with_links"] or 0),
+            "premium_active": int(row["premium_active"] or 0),
+        }
+
     async def deactivate_player(self, tag: str, discord_user_id: int) -> bool:
         """Soft-delete a tag for the given owner. No-op if mismatch.
 
@@ -901,6 +932,29 @@ class Repository:
             end,
         )
         return int(v or 0)
+
+    async def aggregate_defenses_between(
+        self,
+        tag: str,
+        start: datetime,
+        end: datetime,
+    ) -> tuple[int, int]:
+        """Return (count, sum_trophies_lost) for defenses in [start, end)."""
+        row = await self._db.pool.fetchrow(
+            f"""
+            SELECT
+              COUNT(*)::bigint AS n,
+              COALESCE(SUM(trophies_lost), 0)::bigint AS lost
+            FROM {TBL_DEFENSE_LOG}
+            WHERE player_tag = $1 AND logged_at >= $2 AND logged_at < $3
+            """,
+            tag,
+            start,
+            end,
+        )
+        if row is None:
+            return 0, 0
+        return int(row["n"] or 0), int(row["lost"] or 0)
 
     async def get_worst_defense_between(
         self,

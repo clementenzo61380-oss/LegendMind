@@ -90,6 +90,7 @@ class DailyDigestService:
         if tier is LeagueType.LEGEND_I:
             since = datetime.now(timezone.utc) - timedelta(days=14)
             snapshots = await self._repo.get_snapshots_since(tag, since)
+            # Digest runs without defense_log context; show attack avg only.
             out.append(briefing.daily_embed_legend_i(tag, latest, snapshots))
             out.append(
                 briefing.predict_embed_legend_i(
