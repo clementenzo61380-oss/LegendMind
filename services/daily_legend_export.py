@@ -1,4 +1,4 @@
-"""Orchestration export Excel : une passe après chaque reset Légende (+ décalage minutes)."""
+"""Orchestration export PDF : une passe après chaque reset Légende (+ décalage minutes)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import discord
 
-from services.daily_legend_xlsx import append_legend_day_rows
+from services.daily_legend_pdf import append_legend_day_rows_pdf
 from services.db import Repository
 from services.game_tuning import get_tuning
 from services.legend_day_export import (
@@ -26,7 +26,8 @@ log = logging.getLogger(__name__)
 class DailyLegendExportSettings:
     enabled: bool
     minute_after_reset: int
-    xlsx_path: Path
+    pdf_path: Path
+    history_path: Path
     state_path: Path
     discord_channel_id: int | None
 
@@ -67,7 +68,7 @@ class DailyLegendExportService:
         p.write_text(legend_day_end.isoformat(), encoding="utf-8")
 
     async def run_if_due(self, now_utc: datetime) -> int:
-        """Si l'heure correspond et la journée n'est pas déjà exportée, génère le xlsx.
+        """Si l'heure correspond et la journée n'est pas déjà exportée, met à jour le PDF.
 
         Retourne le nombre de joueurs écrits (0 si rien à faire).
         """
@@ -106,12 +107,16 @@ class DailyLegendExportService:
             self._mark_exported(window.end_utc)
             return 0
 
-        append_legend_day_rows(self._settings.xlsx_path, rows)
+        append_legend_day_rows_pdf(
+            self._settings.pdf_path,
+            self._settings.history_path,
+            rows,
+        )
         self._mark_exported(window.end_utc)
         log.info(
             "Export Légende: %d joueurs → %s",
             len(rows),
-            self._settings.xlsx_path,
+            self._settings.pdf_path,
         )
 
         ch_id = self._settings.discord_channel_id
@@ -125,13 +130,13 @@ class DailyLegendExportService:
         if not isinstance(channel, discord.TextChannel):
             log.warning("DAILY_LEGEND_EXPORT_DISCORD_CHANNEL_ID: salon introuvable %s", channel_id)
             return
-        path = self._settings.xlsx_path
+        path = self._settings.pdf_path
         if not path.is_file():
             return
         try:
             raw = path.read_bytes()
             await channel.send(
-                content="📊 Export quotidien Légende (auto)",
+                content="📄 Export quotidien Légende (PDF, auto)",
                 file=discord.File(io.BytesIO(raw), filename=path.name),
             )
         except OSError:

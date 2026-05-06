@@ -178,12 +178,25 @@ class Config:
     extended_trial_guild_ids: frozenset[int] = frozenset()
     extended_trial_days: int = 60
 
-    # Export Excel quotidien (stats Légende par journée de reset — voir GAME_TUNING / reset UTC).
+    # Export PDF quotidien (stats Légende par journée de reset — voir GAME_TUNING / reset UTC).
     daily_legend_export_enabled: bool = False
     daily_legend_export_minute_after_reset: int = 5
-    daily_legend_export_xlsx_path: str = "data/daily_legend_stats.xlsx"
+    daily_legend_export_pdf_path: str = "data/daily_legend_stats.pdf"
+    # Vide = ``{nom_du_pdf_sans_ext}_history.jsonl`` à côté du PDF (historique cumulatif).
+    daily_legend_export_history_path: str = ""
     daily_legend_export_state_path: str = "data/.daily_legend_export_last"
     daily_legend_export_discord_channel_id: int | None = None
+
+
+def _daily_legend_pdf_path_from_env() -> str:
+    """Chemin du PDF d'export ; rétro-compat si seul ``DAILY_LEGEND_EXPORT_XLSX_PATH`` est défini."""
+    pdf = os.environ.get("DAILY_LEGEND_EXPORT_PDF_PATH", "").strip()
+    if pdf:
+        return pdf
+    legacy = os.environ.get("DAILY_LEGEND_EXPORT_XLSX_PATH", "").strip()
+    if legacy:
+        return str(Path(legacy).with_suffix(".pdf"))
+    return "data/daily_legend_stats.pdf"
 
 
 def load_config() -> Config:
@@ -220,9 +233,10 @@ def load_config() -> Config:
             "DAILY_LEGEND_EXPORT_MINUTE_AFTER_RESET",
             5,
         ),
-        daily_legend_export_xlsx_path=os.environ.get(
-            "DAILY_LEGEND_EXPORT_XLSX_PATH",
-            "data/daily_legend_stats.xlsx",
+        daily_legend_export_pdf_path=_daily_legend_pdf_path_from_env(),
+        daily_legend_export_history_path=os.environ.get(
+            "DAILY_LEGEND_EXPORT_HISTORY_PATH",
+            "",
         ),
         daily_legend_export_state_path=os.environ.get(
             "DAILY_LEGEND_EXPORT_STATE_PATH",

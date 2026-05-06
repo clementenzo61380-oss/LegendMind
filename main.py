@@ -47,6 +47,24 @@ from services.stripe_webhook import StripeWebhookServer
 from services.debug_ndjson import debug_ndjson
 
 
+def _slash_overlap_names(
+    global_cmds: list[discord.app_commands.AppCommand],
+    guild_cmds: list[discord.app_commands.AppCommand],
+    *,
+    limit: int = 30,
+) -> dict[str, object]:
+    """Names present both as global and guild commands (Discord client shows duplicates)."""
+    global_names = {c.name for c in global_cmds}
+    guild_names = {c.name for c in guild_cmds}
+    overlap = sorted(global_names & guild_names)
+    return {
+        "global_name_count": len(global_names),
+        "guild_name_count": len(guild_names),
+        "overlap_count": len(overlap),
+        "overlap_sample": overlap[:limit],
+    }
+
+
 def _configure_logging(level: str) -> None:
     logging.basicConfig(
         level=getattr(logging, level.upper(), logging.INFO),
@@ -353,10 +371,14 @@ async def _run(config: Config) -> None:  # noqa: PLR0915 — entry point wiring 
 
     digest_task = asyncio.create_task(_digest_loop())
 
+    _pdf = Path(config.daily_legend_export_pdf_path)
+    _hist_raw = (config.daily_legend_export_history_path or "").strip()
+    _history = Path(_hist_raw) if _hist_raw else _pdf.with_name(f"{_pdf.stem}_history.jsonl")
     legend_export_settings = DailyLegendExportSettings(
         enabled=config.daily_legend_export_enabled,
         minute_after_reset=config.daily_legend_export_minute_after_reset,
-        xlsx_path=Path(config.daily_legend_export_xlsx_path),
+        pdf_path=_pdf,
+        history_path=_history,
         state_path=Path(config.daily_legend_export_state_path),
         discord_channel_id=config.daily_legend_export_discord_channel_id,
     )
@@ -406,10 +428,35 @@ async def _run(config: Config) -> None:  # noqa: PLR0915 — entry point wiring 
     @bot.event
     async def on_ready() -> None:  # noqa: WPS430
         log.info("Bot ready as %s (%d guilds)", bot.user, len(bot.guilds))
-        mode = (config.slash_sync_mode or "both").strip().lower()
-        if mode not in {"guild", "global", "both"}:
+        # #region agent log
+        on_ready_n = getattr(bot, "_slash_debug_on_ready_count", 0) + 1
+        bot._slash_debug_on_ready_count = on_ready_n
+        # #endregion
+        raw_mode = (config.slash_sync_mode or "").strip().lower()
+        mode = raw_mode or "both"
+        mode_invalid = mode not in {"guild", "global", "both"}
+        if mode_invalid:
             log.warning("Unknown SLASH_SYNC_MODE=%r; falling back to 'both'", mode)
             mode = "both"
+
+        # #region agent log
+        debug_ndjson(
+            hypothesis_id="DUP-H1",
+            location="main.py:on_ready:entry",
+            message="slash sync entry",
+            data={
+                "on_ready_n": on_ready_n,
+                "raw_slash_sync_mode": raw_mode or None,
+                "effective_mode": mode,
+                "mode_invalid_fallback": mode_invalid,
+                "application_id": bot.application_id,
+                "guild_count": len(bot.guilds),
+                "slash_purge_global": bool(config.slash_purge_global),
+                "slash_purge_guild": bool(config.slash_purge_guild),
+            },
+            run_id="dup-debug",
+        )
+        # #endregion
 
         if config.slash_purge_global:
             try:
@@ -424,18 +471,27 @@ async def _run(config: Config) -> None:  # noqa: PLR0915 — entry point wiring 
         try:
             global_remote = await bot.tree.fetch_commands()
             guild_remote_counts: dict[int, int] = {}
+            overlap_by_guild: dict[str, object] = {}
             for g in bot.guilds:
-                guild_remote_counts[g.id] = len(await bot.tree.fetch_commands(guild=g))
+                g_cmds = await bot.tree.fetch_commands(guild=g)
+                guild_remote_counts[g.id] = len(g_cmds)
+                overlap_by_guild[str(g.id)] = _slash_overlap_names(global_remote, g_cmds)
+            # #region agent log
             debug_ndjson(
-                hypothesis_id="DUP",
-                location="main.py:on_ready:remote_counts",
-                message="remote command counts",
+                hypothesis_id="DUP-H1",
+                location="main.py:on_ready:remote_counts_before",
+                message="remote command counts before sync",
                 data={
                     "sync_mode": mode,
+                    "will_run_guild_sync": mode in {"guild", "both"},
+                    "will_run_global_sync": mode in {"global", "both"},
                     "remote_global": len(global_remote),
                     "remote_guild_counts": guild_remote_counts,
+                    "global_guild_name_overlap": overlap_by_guild,
                 },
+                run_id="dup-debug",
             )
+            # #endregion
         except Exception:  # noqa: BLE001
             log.exception("Failed to fetch remote commands for debug")
 
@@ -460,18 +516,28 @@ async def _run(config: Config) -> None:  # noqa: PLR0915 — entry point wiring 
         try:
             global_remote2 = await bot.tree.fetch_commands()
             guild_remote_counts2: dict[int, int] = {}
+            overlap_by_guild2: dict[str, object] = {}
             for g in bot.guilds:
-                guild_remote_counts2[g.id] = len(await bot.tree.fetch_commands(guild=g))
+                g_cmds2 = await bot.tree.fetch_commands(guild=g)
+                guild_remote_counts2[g.id] = len(g_cmds2)
+                overlap_by_guild2[str(g.id)] = _slash_overlap_names(global_remote2, g_cmds2)
+            # #region agent log
             debug_ndjson(
-                hypothesis_id="DUP",
+                hypothesis_id="DUP-H1",
                 location="main.py:on_ready:remote_counts_after",
                 message="remote command counts after sync",
                 data={
                     "sync_mode": mode,
+                    "ran_guild_sync": mode in {"guild", "both"},
+                    "ran_global_sync": mode in {"global", "both"},
+                    "on_ready_n": on_ready_n,
                     "remote_global": len(global_remote2),
                     "remote_guild_counts": guild_remote_counts2,
+                    "global_guild_name_overlap": overlap_by_guild2,
                 },
+                run_id="dup-debug",
             )
+            # #endregion
         except Exception:  # noqa: BLE001
             log.exception("Failed to fetch remote commands after sync for debug")
 

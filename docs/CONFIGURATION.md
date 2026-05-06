@@ -72,17 +72,18 @@ Sans URL, le bot utilise `constants.py` (dont **`LEGEND_DAILY_RESET_HOUR_UTC`** 
 
 ---
 
-## Export Excel quotidien (Légende)
+## Export PDF quotidien (Légende)
 
 | Variable | Req. | Défaut | Description |
 |---|---|---|---|
 | `DAILY_LEGEND_EXPORT_ENABLED` | ❌ | `false` | `true` pour activer l’export après chaque journée de reset. |
 | `DAILY_LEGEND_EXPORT_MINUTE_AFTER_RESET` | ❌ | `5` | Minute UTC à laquelle lancer l’export (ex. reset **17h** UTC + **5** → **17:05**). |
-| `DAILY_LEGEND_EXPORT_XLSX_PATH` | ❌ | `data/daily_legend_stats.xlsx` | Chemin du fichier `.xlsx`. |
+| `DAILY_LEGEND_EXPORT_PDF_PATH` | ❌ | `data/daily_legend_stats.pdf` | Chemin du fichier `.pdf` régénéré (une section par joueur). Si absent mais `DAILY_LEGEND_EXPORT_XLSX_PATH` est encore défini (ancien nom), le code utilise le même chemin avec l’extension `.pdf`. |
+| `DAILY_LEGEND_EXPORT_HISTORY_PATH` | ❌ | *(vide)* | Fichier `.jsonl` cumulatif ; si vide : `{nom_du_pdf_sans_ext}_history.jsonl` à côté du PDF. |
 | `DAILY_LEGEND_EXPORT_STATE_PATH` | ❌ | `data/.daily_legend_export_last` | Fichier d’état pour éviter les doublons. |
 | `DAILY_LEGEND_EXPORT_DISCORD_CHANNEL_ID` | ❌ | — | ID salon texte pour poster le fichier ; vide = **fichier seulement**. |
 
-Avec **Docker Compose**, le dossier `./data` est monté sur `/app/data` pour conserver le fichier entre redémarrages.
+Avec **Docker Compose**, le dossier `./data` est monté sur `/app/data` pour conserver le PDF et l’historique entre redémarrages.
 
 ---
 

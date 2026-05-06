@@ -32,7 +32,8 @@ htmlcov/
 .env.*.local
 
 # Exports & état local (recréés par le bot)
-data/*.xlsx
+data/*.pdf
+data/*_history.jsonl
 data/.daily_legend_export_last
 *.log
 
