@@ -58,6 +58,24 @@ AUTO_PROSPECT_INTERVAL_HOURS=6   # Fréquence des passages
 AUTO_QUALIFY_SCORE=70            # Score à partir duquel un lead passe en "qualifié" tout seul
 ```
 
+## Démarrage automatique sur Mac (launchd)
+
+Pour que PROSPECTOR (et donc l'auto-prospection) tourne en permanence sans laisser
+un terminal ouvert :
+
+```bash
+bash scripts/install_launchd.sh
+```
+
+L'app démarre alors à chaque ouverture de session et redémarre toute seule en cas
+de plantage. Logs : `~/Library/Logs/prospector/prospector.log`.
+
+```bash
+launchctl list | grep prospector                       # statut
+launchctl kickstart -k gui/$(id -u)/com.prospector.app # redémarrer
+bash scripts/uninstall_launchd.sh                      # désinstaller
+```
+
 ## Auto-prospection : ce qui est automatisé (et ce qui ne peut pas l'être)
 
 **Automatisé** (tourne tout seul tant que l'app est lancée) :

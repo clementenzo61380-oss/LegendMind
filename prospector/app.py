@@ -86,4 +86,6 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run("app:app", host="127.0.0.1", port=port, reload=True)
+    # RELOAD=false en service launchd (le rechargement à chaud est inutile hors développement)
+    reload = os.getenv("RELOAD", "true").lower() in ("1", "true", "oui")
+    uvicorn.run("app:app", host="127.0.0.1", port=port, reload=reload)
