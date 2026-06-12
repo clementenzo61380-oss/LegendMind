@@ -3,33 +3,111 @@
 {% block page_title %}{{ client.nom }}{% endblock %}
 
 {% block topbar_actions %}
-  <a href="/clients/{{ client.id }}/modifier" class="btn btn-outline">Modifier</a>
+  <a href="/clients/{{ client.id }}/modifier" class="btn btn-primary">Modifier</a>
 {% endblock %}
 
 {% block content %}
-<div class="card">
-  <h2>Informations générales</h2>
-  <table>
-    <tbody>
-      <tr><td style="color:var(--gris-t);width:200px">SIRET</td><td>{{ client.siret or '—' }}</td></tr>
-      <tr><td style="color:var(--gris-t)">Adresse</td><td>{{ client.adresse or '—' }}, {{ client.code_postal or '' }} {{ client.ville or '' }}</td></tr>
-      <tr><td style="color:var(--gris-t)">Téléphone</td><td>{{ client.telephone or '—' }}</td></tr>
-      <tr><td style="color:var(--gris-t)">Email</td><td>{{ client.email or '—' }}</td></tr>
-      <tr><td style="color:var(--gris-t)">Site web</td><td>{{ client.site_web or '—' }}</td></tr>
-      <tr><td style="color:var(--gris-t)">Effectif</td><td>{{ client.effectif or '—' }}</td></tr>
-      <tr><td style="color:var(--gris-t)">CA annuel</td><td>{{ '%.0f €' % client.ca_annuel if client.ca_annuel else '—' }}</td></tr>
-    </tbody>
-  </table>
-</div>
-<div class="card">
-  <h2>Contact principal</h2>
-  <table>
-    <tbody>
-      <tr><td style="color:var(--gris-t);width:200px">Nom</td><td>{{ client.contact_nom or '—' }}</td></tr>
-      <tr><td style="color:var(--gris-t)">Poste</td><td>{{ client.contact_poste or '—' }}</td></tr>
-      <tr><td style="color:var(--gris-t)">Téléphone</td><td>{{ client.contact_telephone or '—' }}</td></tr>
-      <tr><td style="color:var(--gris-t)">Email</td><td>{{ client.contact_email or '—' }}</td></tr>
-    </tbody>
-  </table>
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start">
+
+  <div>
+    <!-- ============ Identité ============ -->
+    <div class="card">
+      <h2>Identité</h2>
+      <table>
+        <tbody>
+          <tr><td style="color:var(--gris-t);width:190px">SIRET</td><td>{{ client.siret or '—' }}</td></tr>
+          <tr><td style="color:var(--gris-t)">Adresse</td><td>{{ client.adresse or '—' }}{{ ', ' + client.code_postal if client.code_postal }} {{ client.ville or '' }}</td></tr>
+          <tr><td style="color:var(--gris-t)">Téléphone / Email</td><td>{{ client.telephone or '—' }} · {{ client.email or '—' }}</td></tr>
+          <tr><td style="color:var(--gris-t)">Site web</td><td>{% if client.site_web %}<a href="{{ client.site_web }}" target="_blank" rel="noopener">{{ client.site_web }}</a>{% else %}—{% endif %}</td></tr>
+          <tr><td style="color:var(--gris-t)">Création / Effectif</td><td>{{ client.annee_creation or '—' }} · {{ client.effectif or '—' }} salariés</td></tr>
+          <tr><td style="color:var(--gris-t)">CA annuel</td><td>{{ '{:,.0f} €'.format(client.ca_annuel).replace(',', ' ') if client.ca_annuel else '—' }}</td></tr>
+          <tr><td style="color:var(--gris-t)">Zones d'intervention</td><td>
+            {% for z in client.zones_liste %}<span class="badge repérée" style="margin-right:4px">{{ z }}</span>{% else %}—{% endfor %}
+          </td></tr>
+          <tr><td style="color:var(--gris-t)">Certifications</td><td>
+            {% for c in client.certifs_liste %}<span class="badge déposée" style="margin-right:4px">{{ c }}</span>{% else %}—{% endfor %}
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============ Moyens ============ -->
+    <div class="card">
+      <h2>Moyens techniques et méthodes</h2>
+      <table>
+        <tbody>
+          <tr><td style="color:var(--gris-t);width:190px;vertical-align:top">Matériels</td><td style="white-space:pre-wrap">{{ client.materiels or '—' }}</td></tr>
+          <tr><td style="color:var(--gris-t);vertical-align:top">Produits</td><td style="white-space:pre-wrap">{{ client.produits_utilises or '—' }}</td></tr>
+          <tr><td style="color:var(--gris-t);vertical-align:top">Démarche qualité</td><td style="white-space:pre-wrap">{{ client.demarche_qualite or '—' }}</td></tr>
+          <tr><td style="color:var(--gris-t);vertical-align:top">Politique RSE</td><td style="white-space:pre-wrap">{{ client.politique_rse or '—' }}</td></tr>
+          <tr><td style="color:var(--gris-t);vertical-align:top">Références</td><td style="white-space:pre-wrap">{{ client.references_clients or '—' }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============ Assurance et contact ============ -->
+    <div class="card">
+      <h2>Assurance et contact</h2>
+      <table>
+        <tbody>
+          <tr><td style="color:var(--gris-t);width:190px">Assureur</td><td>{{ client.assureur or '—' }} {{ '(police ' + client.numero_police + ')' if client.numero_police }}</td></tr>
+          <tr><td style="color:var(--gris-t)">Garantie</td><td>{{ '{:,.0f} €'.format(client.montant_garantie).replace(',', ' ') if client.montant_garantie else '—' }}</td></tr>
+          <tr><td style="color:var(--gris-t)">Contact</td><td>{{ client.contact_nom or '—' }} {{ '— ' + client.contact_poste if client.contact_poste }}</td></tr>
+          <tr><td style="color:var(--gris-t)">Tél. / Email</td><td>{{ client.contact_telephone or '—' }} · {{ client.contact_email or '—' }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============ Suppression ============ -->
+    <form method="post" action="/clients/{{ client.id }}/supprimer"
+          onsubmit="return confirm('Supprimer ce client ? Les fichiers sur disque seront conservés.')">
+      <button type="submit" class="btn btn-danger">Supprimer le client</button>
+    </form>
+  </div>
+
+  <div>
+    <!-- ============ Logo ============ -->
+    <div class="card">
+      <h2>Logo</h2>
+      {% if a_logo %}
+        <img src="/clients/{{ client.id }}/logo" alt="Logo {{ client.nom }}"
+             style="max-width:100%;max-height:120px;display:block;margin-bottom:12px;border:1px solid var(--gris-2);border-radius:8px;padding:8px">
+      {% else %}
+        <p style="color:var(--gris-t);font-size:.88rem;margin-bottom:12px">Aucun logo. Il sera inséré en page de garde du mémoire technique.</p>
+      {% endif %}
+      <form method="post" action="/clients/{{ client.id }}/logo" enctype="multipart/form-data">
+        <input type="file" name="logo" accept="image/png" required style="font-size:.85rem;margin-bottom:8px">
+        <button type="submit" class="btn btn-outline" style="width:100%">{{ 'Remplacer' if a_logo else 'Téléverser' }} (PNG)</button>
+      </form>
+    </div>
+
+    <!-- ============ Pièces administratives ============ -->
+    <div class="card">
+      <h2>Pièces administratives</h2>
+      {% set manquantes = pieces | rejectattr('present') | list | length %}
+      {% if manquantes == 0 %}
+        <div class="alert alert-success" style="margin-bottom:14px">Dossier administratif complet ✓</div>
+      {% else %}
+        <div class="alert alert-warning" style="margin-bottom:14px">{{ manquantes }} pièce(s) manquante(s)</div>
+      {% endif %}
+
+      {% for p in pieces %}
+      <div style="padding:10px 0;border-bottom:1px solid var(--gris-1)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:1rem">{{ '✅' if p.present else '❌' }}</span>
+          <span style="font-size:.85rem;flex:1">{{ p.libelle }}</span>
+        </div>
+        {% if p.present %}
+          <a href="/clients/{{ client.id }}/pieces/{{ p.fichier }}" style="font-size:.8rem;margin-left:26px">{{ p.fichier }}</a>
+        {% endif %}
+        <form method="post" action="/clients/{{ client.id }}/pieces/{{ p.cle }}" enctype="multipart/form-data"
+              style="display:flex;gap:6px;margin-left:26px;margin-top:4px">
+          <input type="file" name="fichier" required style="font-size:.75rem;flex:1">
+          <button type="submit" class="btn btn-outline" style="padding:3px 10px;font-size:.75rem">{{ 'Remplacer' if p.present else 'Ajouter' }}</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
 </div>
 {% endblock %}

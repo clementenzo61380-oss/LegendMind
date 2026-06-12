@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 from .database import init_db
 from . import models
+from .routes_clients import router as clients_router
 
 load_dotenv()
 
@@ -23,6 +24,8 @@ app = FastAPI(title="AO-Propre", version="1.0.0")
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+app.include_router(clients_router)
 
 
 @app.on_event("startup")
@@ -53,35 +56,6 @@ def index(request: Request):
     return templates.TemplateResponse(
         "index.html",
         {"request": request, "stats": stats, "dossiers": dossiers[:10]},
-    )
-
-
-# ---------------------------------------------------------------------------
-# Clients (stub — complété en Phase 2)
-# ---------------------------------------------------------------------------
-
-@app.get("/clients", response_class=HTMLResponse)
-def liste_clients(request: Request):
-    clients = models.lister_clients()
-    return templates.TemplateResponse(
-        "clients/liste.html", {"request": request, "clients": clients}
-    )
-
-
-@app.get("/clients/nouveau", response_class=HTMLResponse)
-def nouveau_client_form(request: Request):
-    return templates.TemplateResponse(
-        "clients/formulaire.html", {"request": request, "client": None}
-    )
-
-
-@app.get("/clients/{client_id}", response_class=HTMLResponse)
-def detail_client(request: Request, client_id: int):
-    client = models.obtenir_client(client_id)
-    if not client:
-        return RedirectResponse("/clients")
-    return templates.TemplateResponse(
-        "clients/detail.html", {"request": request, "client": client}
     )
 
 

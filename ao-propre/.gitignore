@@ -1,0 +1,12 @@
+# Environnement
+.venv/
+.env
+__pycache__/
+*.pyc
+
+# Données locales — ne jamais versionner les données clients
+aopropre.db
+aopropre.db-shm
+aopropre.db-wal
+clients/
+dossiers/

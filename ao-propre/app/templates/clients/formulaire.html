@@ -1,29 +1,160 @@
 {% extends "base.html" %}
-{% block title %}{{ 'Modifier' if client else 'Nouveau client' }} — AO-Propre{% endblock %}
-{% block page_title %}{{ 'Modifier' if client else 'Nouveau client' }}{% endblock %}
+{% block title %}{{ 'Modifier ' + client.nom if client else 'Nouveau client' }} — AO-Propre{% endblock %}
+{% block page_title %}{{ 'Modifier — ' + client.nom if client else 'Nouveau client' }}{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{{ '/clients/' + client.id|string if client else '/clients' }}" class="btn btn-outline">Annuler</a>
+{% endblock %}
 
 {% block content %}
-<div class="alert alert-info">
-  Ce formulaire sera complété en Phase 2. La structure de base est en place.
-</div>
-<div class="card">
-  <form method="post" action="/clients{{ '/' + client.id|string if client else '' }}">
-    <div class="form-group">
-      <label>Nom de l'entreprise *</label>
-      <input type="text" name="nom" value="{{ client.nom if client else '' }}" required>
+<form method="post" action="/clients{{ '/' + client.id|string if client else '' }}">
+
+  <!-- ============ Identité de l'entreprise ============ -->
+  <div class="card">
+    <h2>1. Identité de l'entreprise</h2>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:0 18px">
+      <div class="form-group">
+        <label>Nom de l'entreprise *</label>
+        <input type="text" name="nom" value="{{ client.nom if client else '' }}" required>
+      </div>
+      <div class="form-group">
+        <label>SIRET</label>
+        <input type="text" name="siret" value="{{ client.siret or '' if client else '' }}" placeholder="14 chiffres">
+      </div>
     </div>
     <div class="form-group">
-      <label>SIRET</label>
-      <input type="text" name="siret" value="{{ client.siret if client else '' }}">
+      <label>Adresse</label>
+      <input type="text" name="adresse" value="{{ client.adresse or '' if client else '' }}">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 2fr 1fr 1fr;gap:0 18px">
+      <div class="form-group">
+        <label>Code postal</label>
+        <input type="text" name="code_postal" value="{{ client.code_postal or '' if client else '' }}">
+      </div>
+      <div class="form-group">
+        <label>Ville</label>
+        <input type="text" name="ville" value="{{ client.ville or '' if client else '' }}">
+      </div>
+      <div class="form-group">
+        <label>Année de création</label>
+        <input type="number" name="annee_creation" value="{{ client.annee_creation or '' if client else '' }}" min="1900" max="2100">
+      </div>
+      <div class="form-group">
+        <label>Effectif</label>
+        <input type="number" name="effectif" value="{{ client.effectif or '' if client else '' }}" min="0">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 18px">
+      <div class="form-group">
+        <label>Téléphone</label>
+        <input type="tel" name="telephone" value="{{ client.telephone or '' if client else '' }}">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" name="email" value="{{ client.email or '' if client else '' }}">
+      </div>
+      <div class="form-group">
+        <label>Site web</label>
+        <input type="text" name="site_web" value="{{ client.site_web or '' if client else '' }}" placeholder="https://…">
+      </div>
+    </div>
+    <div class="form-group" style="max-width:280px">
+      <label>Chiffre d'affaires annuel (€)</label>
+      <input type="number" name="ca_annuel" value="{{ client.ca_annuel or '' if client else '' }}" min="0" step="1000">
+    </div>
+  </div>
+
+  <!-- ============ Activité et zones ============ -->
+  <div class="card">
+    <h2>2. Activité et zones d'intervention</h2>
+    <div class="form-group">
+      <label>Départements d'intervention</label>
+      <div style="display:flex;gap:22px;flex-wrap:wrap;padding:6px 0">
+        {% for code, nom in departements %}
+        <label style="display:flex;align-items:center;gap:6px;font-weight:400;margin:0">
+          <input type="checkbox" name="zones_intervention" value="{{ code }}"
+            {{ 'checked' if client and code in client.zones_liste }}>
+          {{ code }} — {{ nom }}
+        </label>
+        {% endfor %}
+      </div>
     </div>
     <div class="form-group">
-      <label>Ville</label>
-      <input type="text" name="ville" value="{{ client.ville if client else '' }}">
+      <label>Certifications et labels <small style="color:var(--gris-t)">(une par ligne : ISO 9001, Qualipropre…)</small></label>
+      <textarea name="certifications">{{ client.certifs_liste | join('\n') if client else '' }}</textarea>
     </div>
-    <div style="display:flex;gap:10px;margin-top:8px">
-      <button type="submit" class="btn btn-primary">Enregistrer</button>
-      <a href="/clients" class="btn btn-outline">Annuler</a>
+    <div class="form-group">
+      <label>Références clients <small style="color:var(--gris-t)">(marchés similaires déjà réalisés : nom, surface, durée)</small></label>
+      <textarea name="references_clients">{{ client.references_clients or '' if client else '' }}</textarea>
     </div>
-  </form>
-</div>
+  </div>
+
+  <!-- ============ Moyens techniques ============ -->
+  <div class="card">
+    <h2>3. Moyens techniques et méthodes</h2>
+    <div class="form-group">
+      <label>Matériels <small style="color:var(--gris-t)">(autolaveuses, monobrosses, aspirateurs, véhicules…)</small></label>
+      <textarea name="materiels">{{ client.materiels or '' if client else '' }}</textarea>
+    </div>
+    <div class="form-group">
+      <label>Produits utilisés <small style="color:var(--gris-t)">(gammes, écolabels éventuels)</small></label>
+      <textarea name="produits_utilises">{{ client.produits_utilises or '' if client else '' }}</textarea>
+    </div>
+    <div class="form-group">
+      <label>Démarche qualité <small style="color:var(--gris-t)">(contrôles, traçabilité, cahier de liaison…)</small></label>
+      <textarea name="demarche_qualite">{{ client.demarche_qualite or '' if client else '' }}</textarea>
+    </div>
+    <div class="form-group">
+      <label>Politique RSE / environnement <small style="color:var(--gris-t)">(produits verts, insertion, tri des déchets…)</small></label>
+      <textarea name="politique_rse">{{ client.politique_rse or '' if client else '' }}</textarea>
+    </div>
+  </div>
+
+  <!-- ============ Assurance ============ -->
+  <div class="card">
+    <h2>4. Assurance responsabilité civile</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 18px">
+      <div class="form-group">
+        <label>Assureur</label>
+        <input type="text" name="assureur" value="{{ client.assureur or '' if client else '' }}">
+      </div>
+      <div class="form-group">
+        <label>N° de police</label>
+        <input type="text" name="numero_police" value="{{ client.numero_police or '' if client else '' }}">
+      </div>
+      <div class="form-group">
+        <label>Montant de garantie (€)</label>
+        <input type="number" name="montant_garantie" value="{{ client.montant_garantie or '' if client else '' }}" min="0" step="10000">
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Contact ============ -->
+  <div class="card">
+    <h2>5. Contact principal</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 18px">
+      <div class="form-group">
+        <label>Nom</label>
+        <input type="text" name="contact_nom" value="{{ client.contact_nom or '' if client else '' }}">
+      </div>
+      <div class="form-group">
+        <label>Poste</label>
+        <input type="text" name="contact_poste" value="{{ client.contact_poste or '' if client else '' }}" placeholder="Gérant, directeur d'exploitation…">
+      </div>
+      <div class="form-group">
+        <label>Téléphone</label>
+        <input type="tel" name="contact_telephone" value="{{ client.contact_telephone or '' if client else '' }}">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" name="contact_email" value="{{ client.contact_email or '' if client else '' }}">
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:10px;margin-bottom:30px">
+    <button type="submit" class="btn btn-primary">{{ 'Enregistrer les modifications' if client else 'Créer le client' }}</button>
+    <a href="{{ '/clients/' + client.id|string if client else '/clients' }}" class="btn btn-outline">Annuler</a>
+  </div>
+</form>
 {% endblock %}
