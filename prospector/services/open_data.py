@@ -49,6 +49,8 @@ async def fetch_permis_construire(
                 f"{DATAGOUV_API}/datasets/",
                 params={"q": "sitadel permis construire", "page_size": 5}
             )
+            if search_resp.status_code != 200:
+                raise Exception(f"data.gouv.fr HTTP {search_resp.status_code}")
             datasets = search_resp.json().get("data", [])
 
             resource_id = None

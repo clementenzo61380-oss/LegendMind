@@ -28,9 +28,10 @@ def get_stats():
         # Commissions
         commissions = rows_to_list(db.execute("SELECT * FROM commissions").fetchall())
         ca_total = sum(c["montant"] for c in commissions if c["statut"] == "payee")
+        # Utiliser date_paiement (colonne dédiée) pour le CA mensuel — updated_at est unreliable
         ca_mois = sum(
             c["montant"] for c in commissions
-            if c["statut"] == "payee" and (c.get("updated_at") or "") >= first_day_month
+            if c["statut"] == "payee" and (c.get("date_paiement") or "") >= first_day_month
         )
         en_attente_montant = sum(c["montant"] for c in commissions if c["statut"] in ["en_attente", "en_retard"])
         en_retard_count = sum(1 for c in commissions if c["statut"] == "en_retard")
@@ -118,7 +119,7 @@ def get_commissions_summary():
     with get_db() as db:
         by_month = rows_to_list(
             db.execute(
-                """SELECT strftime('%Y-%m', updated_at) as mois,
+                """SELECT strftime('%Y-%m', COALESCE(date_paiement, updated_at)) as mois,
                           SUM(montant) as montant, COUNT(*) as count
                    FROM commissions
                    WHERE statut = 'payee'

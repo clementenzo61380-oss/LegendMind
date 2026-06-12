@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS commissions (
     taux REAL DEFAULT 5.0,
     montant_chantier REAL DEFAULT 0,
     date_echeance TEXT,
+    date_paiement TEXT,
     statut TEXT DEFAULT 'en_attente',
     relances_count INTEGER DEFAULT 0,
     derniere_relance TEXT,
@@ -111,6 +112,15 @@ def init_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH))
     conn.executescript(SCHEMA)
+    # Migrations pour les bases existantes (ADD COLUMN idempotent via try/except)
+    migrations = [
+        "ALTER TABLE commissions ADD COLUMN date_paiement TEXT",
+    ]
+    for sql in migrations:
+        try:
+            conn.execute(sql)
+        except sqlite3.OperationalError:
+            pass  # colonne déjà présente
     conn.commit()
     conn.close()
 

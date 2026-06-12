@@ -383,9 +383,11 @@ async function deleteLead(id) {
   }
 }
 
-function showTransmitLead(leadId) {
+async function showTransmitLead(leadId) {
   const lead = S.leads.find(l => l.id === leadId);
   if (!lead) return;
+  // Charger les artisans si la liste est vide (accès direct depuis Leads sans passer par Artisans)
+  if (!S.artisans.length) await loadArtisans();
   const artisansOpts = S.artisans.map(a =>
     `<option value="${a.id}">${a.nom} — ${a.metier || ''} — ${a.ville || ''}</option>`
   ).join('');
@@ -560,6 +562,8 @@ async function fetchOD() {
   try {
     const result = await api('POST', '/leads/open-data/fetch', { commune, code_dept: dept, limit });
     const leads = result.leads || [];
+    // La modal peut avoir été fermée pendant l'appel réseau
+    if (!el('od-import-btn')) return;
     el('od-import-btn').style.display = leads.length ? '' : 'none';
     el('od-results').innerHTML = `
       ${result.errors?.length ? `<div class="alert alert-i" style="margin-bottom:10px"><span>ℹ️</span><span>${result.errors.join('<br>')}</span></div>` : ''}
@@ -574,7 +578,7 @@ async function fetchOD() {
       </div>`;
     window._odParams = { commune, code_dept: dept, limit };
   } catch (e) {
-    el('od-results').innerHTML = `<div class="alert alert-d">${e.message}</div>`;
+    if (el('od-results')) el('od-results').innerHTML = `<div class="alert alert-d">${e.message}</div>`;
   }
 }
 
@@ -629,6 +633,8 @@ async function runAutoProspect() {
   try {
     const data = await api('POST', '/leads/auto-prospect/run');
     const r = data.result;
+    // La modal peut avoir été fermée pendant le passage (plusieurs secondes)
+    if (!el('ap-result')) { toast(r ? `${r.imported} leads importés ✓` : data.message); loadLeads(); return; }
     el('ap-result').innerHTML = r
       ? `<div class="alert alert-s" style="margin-top:10px">✅ ${r.imported} nouveau(x) lead(s) importé(s) — ${r.duplicates} doublon(s) ignoré(s) — ${r.auto_qualified} auto-qualifié(s)</div>`
       : `<div class="alert alert-i" style="margin-top:10px">${data.message}</div>`;
@@ -1053,7 +1059,7 @@ function renderCommissionsSummary(stats) {
   const chart = el('monthly-chart');
   const months = stats.by_month || [];
   if (months.length) {
-    const max = Math.max(...months.map(m => m.montant));
+    const max = Math.max(...months.map(m => m.montant)) || 1;
     chart.innerHTML = `<div class="section-title">CA mensuel (commissions encaissées)</div>
       <div style="display:flex;align-items:flex-end;gap:8px;height:80px">
         ${months.slice(0, 12).reverse().map(m => `

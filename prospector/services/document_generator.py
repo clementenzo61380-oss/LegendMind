@@ -222,9 +222,10 @@ def generate_docx(artisan: dict, taux_commission: Optional[float] = None) -> Pat
         h_run.font.size = Pt(12)
         h_run.font.color.rgb = RGBColor(0x1e, 0x3a, 0x5f)
 
-        # Contenu
+        # Contenu — formatage sur les runs, pas sur le style partagé
         p = doc.add_paragraph(section["contenu"])
-        p.style.font.size = Pt(11)
+        for run in p.runs:
+            run.font.size = Pt(11)
 
         doc.add_paragraph()
 
@@ -297,9 +298,10 @@ def generate_pdf(artisan: dict, taux_commission: Optional[float] = None) -> Path
 
     for section in contract["sections"]:
         story.append(Paragraph(section["titre"], style_section_title))
-        # Convertir les sauts de ligne en <br/>
-        contenu_html = section["contenu"].replace("\n", "<br/>")
-        story.append(Paragraph(contenu_html, style_body))
+        # Échapper les entités XML puis convertir les sauts de ligne en <br/>
+        import html as _html
+        contenu_safe = _html.escape(section["contenu"]).replace("\n", "<br/>")
+        story.append(Paragraph(contenu_safe, style_body))
 
     doc.build(story)
     return filepath

@@ -86,7 +86,7 @@ async def create_transmission(data: TransmissionCreate):
                 [data.artisan_id],
             ).fetchone()
         )
-        contrat_date = contract["date_signature"] if contract else ""
+        contrat_date = (contract.get("date_signature") or "") if contract else ""
 
         apporteur_info = {
             "nom": os.getenv("APPORTEUR_NOM", "L'Apporteur"),
@@ -163,11 +163,22 @@ def list_commissions(statut: Optional[str] = None):
             ).fetchall()
         )
 
-    # Marquer automatiquement en_retard si l'échéance est dépassée
+    # Persister en_retard si l'échéance est dépassée (mise à jour SQL + objet retourné)
     today = datetime.date.today().isoformat()
-    for c in commissions:
-        if c["statut"] == "en_attente" and c.get("date_echeance") and c["date_echeance"] < today:
-            c["statut"] = "en_retard"
+    retard_ids = [
+        c["id"] for c in commissions
+        if c["statut"] == "en_attente" and c.get("date_echeance") and c["date_echeance"] < today
+    ]
+    if retard_ids:
+        with get_db() as db:
+            placeholders = ",".join("?" * len(retard_ids))
+            db.execute(
+                f"UPDATE commissions SET statut='en_retard', updated_at=? WHERE id IN ({placeholders}) AND statut='en_attente'",
+                [datetime.datetime.now().isoformat()] + retard_ids,
+            )
+        for c in commissions:
+            if c["id"] in retard_ids:
+                c["statut"] = "en_retard"
 
     return {"commissions": commissions, "total": len(commissions)}
 
@@ -195,9 +206,10 @@ def create_commission(data: CommissionCreate):
         )
         commission = row_to_dict(db.execute("SELECT * FROM commissions WHERE id=?", [cur.lastrowid]).fetchone())
 
-        # Mettre à jour le lead
+        # Mettre à jour le lead uniquement s'il n'est pas déjà à un stade plus avancé
         db.execute(
-            "UPDATE leads SET statut='devis_envoye', montant_chantier_estime=?, commission_attendue=?, updated_at=? WHERE id=?",
+            """UPDATE leads SET statut='devis_envoye', montant_chantier_estime=?, commission_attendue=?, updated_at=?
+               WHERE id=? AND statut NOT IN ('signe', 'commission_payee', 'perdu')""",
             [data.montant_chantier, montant, datetime.datetime.now().isoformat(), data.lead_id],
         )
 
@@ -221,11 +233,13 @@ def update_commission_status(commission_id: int, update: CommissionStatusUpdate)
         }
         if update.notes:
             fields["notes"] = update.notes
+        if update.statut == "payee":
+            fields["date_paiement"] = datetime.date.today().isoformat()
 
         set_clause = ", ".join([f"{k}=?" for k in fields])
         db.execute(f"UPDATE commissions SET {set_clause} WHERE id=?", list(fields.values()) + [commission_id])
 
-        # Si payée, mettre à jour le lead et l'historique artisan
+        # Si payée, mettre à jour le lead + le lead vers signe si nécessaire
         if update.statut == "payee":
             db.execute(
                 "UPDATE leads SET statut='commission_payee', updated_at=? WHERE id=?",

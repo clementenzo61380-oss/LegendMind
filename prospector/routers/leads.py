@@ -211,8 +211,15 @@ async def import_open_data(req: OpenDataRequest):
     result = await fetch_permis_construire(req.commune, req.code_dept, req.limit)
 
     imported = []
+    duplicates = 0
     with get_db() as db:
         for lead_data in result.get("leads", []):
+            raw = lead_data.get("raw_text") or f"{lead_data.get('type_travaux')}|{lead_data.get('localisation')}|{lead_data.get('notes')}"
+            if db.execute(
+                "SELECT id FROM leads WHERE raw_text = ? AND source LIKE 'open_data%'", [raw]
+            ).fetchone():
+                duplicates += 1
+                continue
             lead_data["score"] = score_lead(lead_data)
             cur = db.execute(
                 """INSERT INTO leads
@@ -221,7 +228,7 @@ async def import_open_data(req: OpenDataRequest):
                    VALUES (?,?,?,?,?,?,?,?)""",
                 [
                     lead_data.get("source", "open_data"),
-                    lead_data.get("raw_text"),
+                    raw,
                     lead_data.get("type_travaux"),
                     lead_data.get("budget_estime", 0),
                     lead_data.get("localisation", "Rennes"),
@@ -234,6 +241,7 @@ async def import_open_data(req: OpenDataRequest):
 
     return {
         "imported": len(imported),
+        "duplicates": duplicates,
         "lead_ids": imported,
         "source_info": result.get("errors", []),
     }

@@ -47,7 +47,6 @@ def _config():
 async def run_auto_prospect() -> dict:
     """Un passage complet de prospection : fetch → dédup → import → qualif."""
     cfg = _config()
-    STATUS["running"] = True
     result = {
         "started_at": datetime.now().isoformat(),
         "fetched": 0,
@@ -58,6 +57,7 @@ async def run_auto_prospect() -> dict:
     }
 
     try:
+        STATUS["running"] = True
         data = await fetch_permis_construire(cfg["commune"], cfg["dept"], cfg["limit"])
         leads = data.get("leads", [])
         result["fetched"] = len(leads)
@@ -130,7 +130,10 @@ async def auto_prospect_loop():
     # Premier passage 10 s après le démarrage, puis toutes les N heures
     await asyncio.sleep(10)
     while True:
-        await run_auto_prospect()
+        try:
+            await run_auto_prospect()
+        except Exception:
+            logger.exception("Erreur non gérée dans la boucle d'auto-prospection")
         interval = _config()["interval_hours"] * 3600
         STATUS["next_run"] = datetime.fromtimestamp(
             datetime.now().timestamp() + interval
