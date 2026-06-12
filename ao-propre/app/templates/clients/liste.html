@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Clients — AO-Propre{% endblock %}
+{% block page_title %}Clients{% endblock %}
+
+{% block topbar_actions %}
+  <a href="/clients/nouveau" class="btn btn-primary">+ Nouveau client</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  {% if clients %}
+  <table>
+    <thead>
+      <tr>
+        <th>Nom</th>
+        <th>Ville</th>
+        <th>SIRET</th>
+        <th>Contact</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in clients %}
+      <tr>
+        <td><strong>{{ c.nom }}</strong></td>
+        <td>{{ c.ville or '—' }}</td>
+        <td>{{ c.siret or '—' }}</td>
+        <td>{{ c.contact_nom or '—' }}</td>
+        <td><a href="/clients/{{ c.id }}" class="btn btn-outline" style="padding:4px 10px;font-size:.8rem;">Voir</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="alert alert-info">
+    Aucun client enregistré. <a href="/clients/nouveau">Créer le premier client</a>.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

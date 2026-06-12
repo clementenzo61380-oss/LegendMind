@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ annonce.titre | truncate(50) }} — AO-Propre{% endblock %}
+{% block page_title %}Détail annonce{% endblock %}
+
+{% block topbar_actions %}
+  <a href="/annonces" class="btn btn-outline">← Retour</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>{{ annonce.titre }}</h2>
+  <table>
+    <tbody>
+      <tr><td style="color:var(--gris-t);width:200px">Référence BOAMP</td><td><code>{{ annonce.reference }}</code></td></tr>
+      <tr><td style="color:var(--gris-t)">Acheteur</td><td>{{ annonce.acheteur or '—' }}</td></tr>
+      <tr><td style="color:var(--gris-t)">Département</td><td>{{ annonce.departement or '—' }}</td></tr>
+      <tr><td style="color:var(--gris-t)">Publication</td><td>{{ annonce.date_publication or '—' }}</td></tr>
+      <tr><td style="color:var(--gris-t)">Date limite</td><td>{{ annonce.date_limite or '—' }}</td></tr>
+      <tr><td style="color:var(--gris-t)">Montant estimé</td><td>{{ '%.0f €' % annonce.montant_estime if annonce.montant_estime else '—' }}</td></tr>
+      <tr><td style="color:var(--gris-t)">Statut</td><td><span class="badge {{ annonce.statut | replace(' ', '-') }}">{{ annonce.statut }}</span></td></tr>
+      {% if annonce.url_source %}
+      <tr><td style="color:var(--gris-t)">Source</td><td><a href="{{ annonce.url_source }}" target="_blank" rel="noopener">BOAMP ↗</a></td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+  {% if annonce.description %}
+  <h2 style="margin-top:20px">Description</h2>
+  <p style="line-height:1.6;white-space:pre-wrap">{{ annonce.description }}</p>
+  {% endif %}
+</div>
+{% endblock %}

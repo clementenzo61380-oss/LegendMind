@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ client.nom }} — AO-Propre{% endblock %}
+{% block page_title %}{{ client.nom }}{% endblock %}
+
+{% block topbar_actions %}
+  <a href="/clients/{{ client.id }}/modifier" class="btn btn-outline">Modifier</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>Informations générales</h2>
+  <table>
+    <tbody>
+      <tr><td style="color:var(--gris-t);width:200px">SIRET</td><td>{{ client.siret or '—' }}</td></tr>
+      <tr><td style="color:var(--gris-t)">Adresse</td><td>{{ client.adresse or '—' }}, {{ client.code_postal or '' }} {{ client.ville or '' }}</td></tr>
+      <tr><td style="color:var(--gris-t)">Téléphone</td><td>{{ client.telephone or '—' }}</td></tr>
+      <tr><td style="color:var(--gris-t)">Email</td><td>{{ client.email or '—' }}</td></tr>
+      <tr><td style="color:var(--gris-t)">Site web</td><td>{{ client.site_web or '—' }}</td></tr>
+      <tr><td style="color:var(--gris-t)">Effectif</td><td>{{ client.effectif or '—' }}</td></tr>
+      <tr><td style="color:var(--gris-t)">CA annuel</td><td>{{ '%.0f €' % client.ca_annuel if client.ca_annuel else '—' }}</td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="card">
+  <h2>Contact principal</h2>
+  <table>
+    <tbody>
+      <tr><td style="color:var(--gris-t);width:200px">Nom</td><td>{{ client.contact_nom or '—' }}</td></tr>
+      <tr><td style="color:var(--gris-t)">Poste</td><td>{{ client.contact_poste or '—' }}</td></tr>
+      <tr><td style="color:var(--gris-t)">Téléphone</td><td>{{ client.contact_telephone or '—' }}</td></tr>
+      <tr><td style="color:var(--gris-t)">Email</td><td>{{ client.contact_email or '—' }}</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}

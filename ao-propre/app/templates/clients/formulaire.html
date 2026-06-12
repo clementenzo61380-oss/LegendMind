@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Modifier' if client else 'Nouveau client' }} — AO-Propre{% endblock %}
+{% block page_title %}{{ 'Modifier' if client else 'Nouveau client' }}{% endblock %}
+
+{% block content %}
+<div class="alert alert-info">
+  Ce formulaire sera complété en Phase 2. La structure de base est en place.
+</div>
+<div class="card">
+  <form method="post" action="/clients{{ '/' + client.id|string if client else '' }}">
+    <div class="form-group">
+      <label>Nom de l'entreprise *</label>
+      <input type="text" name="nom" value="{{ client.nom if client else '' }}" required>
+    </div>
+    <div class="form-group">
+      <label>SIRET</label>
+      <input type="text" name="siret" value="{{ client.siret if client else '' }}">
+    </div>
+    <div class="form-group">
+      <label>Ville</label>
+      <input type="text" name="ville" value="{{ client.ville if client else '' }}">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button type="submit" class="btn btn-primary">Enregistrer</button>
+      <a href="/clients" class="btn btn-outline">Annuler</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

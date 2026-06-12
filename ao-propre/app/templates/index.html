@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Tableau de bord — AO-Propre{% endblock %}
+{% block page_title %}Tableau de bord{% endblock %}
+
+{% block topbar_actions %}
+  <a href="/annonces" class="btn btn-outline">Voir les annonces</a>
+{% endblock %}
+
+{% block content %}
+<div class="stats-grid">
+  <div class="stat-tile">
+    <span class="label">Clients</span>
+    <span class="value">{{ stats.total_clients }}</span>
+  </div>
+  <div class="stat-tile">
+    <span class="label">Annonces</span>
+    <span class="value">{{ stats.total_annonces }}</span>
+  </div>
+  <div class="stat-tile">
+    <span class="label">En cours</span>
+    <span class="value">{{ stats.dossiers_en_cours }}</span>
+  </div>
+  <div class="stat-tile">
+    <span class="label">Marchés gagnés</span>
+    <span class="value">{{ stats.dossiers_gagnes }}</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Dossiers récents</h2>
+
+  {% if dossiers %}
+  <table>
+    <thead>
+      <tr>
+        <th>Client</th>
+        <th>Annonce</th>
+        <th>Acheteur</th>
+        <th>Date limite</th>
+        <th>Statut</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in dossiers %}
+      <tr>
+        <td>{{ d.client_nom }}</td>
+        <td>{{ d.annonce_titre | truncate(50) }}</td>
+        <td>{{ d.acheteur or '—' }}</td>
+        <td>{{ d.date_limite or '—' }}</td>
+        <td>
+          <span class="badge {{ d.statut | replace(' ', '-') }}">{{ d.statut }}</span>
+        </td>
+        <td><a href="/dossiers/{{ d.id }}" class="btn btn-outline" style="padding:4px 10px;font-size:.8rem;">Voir</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="alert alert-info">
+    Aucun dossier pour l'instant.
+    Commencez par <a href="/clients/nouveau">créer un client</a>, puis associez-lui une annonce.
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Démarrage rapide</h2>
+  <ol style="padding-left:1.3em;line-height:2">
+    <li><a href="/clients/nouveau">Créer une fiche client</a></li>
+    <li>Lancer la veille BOAMP : <code>make veille</code></li>
+    <li>Associer une annonce à un client pour créer un dossier</li>
+    <li>Générer le mémoire technique via l'IA</li>
+  </ol>
+</div>
+{% endblock %}

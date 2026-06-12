@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Annonces — AO-Propre{% endblock %}
+{% block page_title %}Annonces BOAMP{% endblock %}
+
+{% block topbar_actions %}
+  <a href="#" onclick="alert('Lancez : make veille')" class="btn btn-primary">Lancer la veille</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  {% if annonces %}
+  <table>
+    <thead>
+      <tr>
+        <th>Référence</th>
+        <th>Titre</th>
+        <th>Acheteur</th>
+        <th>Dép.</th>
+        <th>Date limite</th>
+        <th>Statut</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in annonces %}
+      <tr>
+        <td><code style="font-size:.8rem">{{ a.reference }}</code></td>
+        <td>{{ a.titre | truncate(55) }}</td>
+        <td>{{ a.acheteur or '—' }}</td>
+        <td>{{ a.departement or '—' }}</td>
+        <td>{{ a.date_limite or '—' }}</td>
+        <td><span class="badge {{ a.statut | replace(' ', '-') }}">{{ a.statut }}</span></td>
+        <td><a href="/annonces/{{ a.id }}" class="btn btn-outline" style="padding:4px 10px;font-size:.8rem;">Voir</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="alert alert-info">
+    Aucune annonce. Lancez <code>make veille</code> pour récupérer les appels d'offres du BOAMP.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,23 @@
+# Configuration AO-Propre
+# Codes CPV nettoyage reconnus par le BOAMP
+cpv_codes:
+  - "90910000"   # Services de nettoyage
+  - "90911200"   # Services de nettoyage de bâtiments
+  - "90911300"   # Nettoyage des vitres
+  - "90919200"   # Services de nettoyage de bureaux
+  - "90919300"   # Nettoyage des écoles
+
+# Départements surveillés (35 = Ille-et-Vilaine par défaut)
+departements:
+  - "35"
+  - "22"
+  - "56"
+  - "29"
+
+# Paramètres de veille
+veille:
+  max_resultats: 50
+  delai_jours: 30   # Annonces des X derniers jours
+
+# Modèle IA utilisé pour la génération des mémoires
+modele_ia: "claude-sonnet-4-6"

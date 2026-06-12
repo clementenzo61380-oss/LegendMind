@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Dossiers — AO-Propre{% endblock %}
+{% block page_title %}Dossiers de réponse{% endblock %}
+
+{% block content %}
+<div class="card">
+  {% if dossiers %}
+  <table>
+    <thead>
+      <tr>
+        <th>Client</th>
+        <th>Annonce</th>
+        <th>Acheteur</th>
+        <th>Date limite</th>
+        <th>Statut</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in dossiers %}
+      <tr>
+        <td>{{ d.client_nom }}</td>
+        <td>{{ d.annonce_titre | truncate(45) }}</td>
+        <td>{{ d.acheteur or '—' }}</td>
+        <td>{{ d.date_limite or '—' }}</td>
+        <td><span class="badge {{ d.statut | replace(' ', '-') }}">{{ d.statut }}</span></td>
+        <td><a href="/dossiers/{{ d.id }}" class="btn btn-outline" style="padding:4px 10px;font-size:.8rem;">Voir</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="alert alert-info">
+    Aucun dossier en cours. Créez d'abord un client et importez des annonces BOAMP.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

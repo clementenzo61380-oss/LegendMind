@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}AO-Propre{% endblock %}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bleu:    #2563eb;
+      --bleu-s:  #1e40af;
+      --vert:    #16a34a;
+      --orange:  #ea580c;
+      --gris-1:  #f1f5f9;
+      --gris-2:  #e2e8f0;
+      --gris-t:  #64748b;
+      --texte:   #0f172a;
+      --blanc:   #ffffff;
+      --rouge:   #dc2626;
+      --sidebar-w: 220px;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 15px;
+      color: var(--texte);
+      background: var(--gris-1);
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ---- Sidebar ---- */
+    nav.sidebar {
+      width: var(--sidebar-w);
+      background: var(--bleu);
+      color: var(--blanc);
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+    }
+    nav.sidebar .brand {
+      padding: 20px 18px 16px;
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      border-bottom: 1px solid rgba(255,255,255,.15);
+    }
+    nav.sidebar .brand span { opacity: .7; font-weight: 400; font-size: .85rem; display: block; }
+    nav.sidebar a {
+      display: block;
+      padding: 11px 18px;
+      color: rgba(255,255,255,.85);
+      text-decoration: none;
+      font-size: .95rem;
+      transition: background .15s;
+    }
+    nav.sidebar a:hover, nav.sidebar a.active {
+      background: rgba(255,255,255,.15);
+      color: var(--blanc);
+    }
+    nav.sidebar .section-label {
+      font-size: .7rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      opacity: .5;
+      padding: 16px 18px 4px;
+    }
+    nav.sidebar .spacer { flex: 1; }
+    nav.sidebar .version {
+      padding: 10px 18px;
+      font-size: .75rem;
+      opacity: .4;
+      border-top: 1px solid rgba(255,255,255,.1);
+    }
+
+    /* ---- Main content ---- */
+    main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    header.topbar {
+      background: var(--blanc);
+      border-bottom: 1px solid var(--gris-2);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header.topbar h1 { font-size: 1.15rem; font-weight: 600; }
+    .content { padding: 28px; flex: 1; }
+
+    /* ---- Cards ---- */
+    .card {
+      background: var(--blanc);
+      border: 1px solid var(--gris-2);
+      border-radius: 10px;
+      padding: 22px 24px;
+      margin-bottom: 20px;
+    }
+    .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 14px; }
+
+    /* ---- Stat tiles ---- */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-tile {
+      background: var(--blanc);
+      border: 1px solid var(--gris-2);
+      border-radius: 10px;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .stat-tile .label { font-size: .78rem; color: var(--gris-t); text-transform: uppercase; letter-spacing: .5px; }
+    .stat-tile .value { font-size: 2rem; font-weight: 700; color: var(--bleu); }
+
+    /* ---- Tables ---- */
+    table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+    thead th { text-align: left; padding: 9px 12px; font-size: .78rem; text-transform: uppercase; letter-spacing: .5px; color: var(--gris-t); border-bottom: 2px solid var(--gris-2); }
+    tbody td { padding: 10px 12px; border-bottom: 1px solid var(--gris-1); vertical-align: middle; }
+    tbody tr:hover td { background: var(--gris-1); }
+    tbody tr:last-child td { border-bottom: none; }
+
+    /* ---- Badges statut ---- */
+    .badge {
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: 99px;
+      font-size: .75rem;
+      font-weight: 600;
+    }
+    .badge.repérée     { background:#eff6ff; color:#2563eb; }
+    .badge.proposée    { background:#fefce8; color:#a16207; }
+    .badge.rédaction   { background:#fff7ed; color:#ea580c; }
+    .badge.déposée     { background:#f0fdf4; color:#15803d; }
+    .badge.gagnée      { background:#dcfce7; color:#166534; }
+    .badge.perdue      { background:#fef2f2; color:#dc2626; }
+
+    /* ---- Buttons ---- */
+    .btn {
+      display: inline-block;
+      padding: 8px 16px;
+      border-radius: 7px;
+      font-size: .88rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      text-decoration: none;
+      transition: opacity .15s;
+    }
+    .btn:hover { opacity: .85; }
+    .btn-primary  { background: var(--bleu); color: var(--blanc); }
+    .btn-success  { background: var(--vert); color: var(--blanc); }
+    .btn-danger   { background: var(--rouge); color: var(--blanc); }
+    .btn-outline  { background: transparent; border: 1px solid var(--gris-2); color: var(--texte); }
+
+    /* ---- Forms ---- */
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-size: .88rem; font-weight: 500; margin-bottom: 5px; }
+    input[type=text], input[type=email], input[type=number], input[type=tel],
+    textarea, select {
+      width: 100%;
+      padding: 8px 11px;
+      border: 1px solid var(--gris-2);
+      border-radius: 7px;
+      font-size: .92rem;
+      outline: none;
+      transition: border-color .15s;
+    }
+    input:focus, textarea:focus, select:focus { border-color: var(--bleu); }
+    textarea { min-height: 90px; resize: vertical; }
+
+    /* ---- Alerts ---- */
+    .alert { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: .92rem; }
+    .alert-info    { background: #eff6ff; color: #1d4ed8; border-left: 4px solid #2563eb; }
+    .alert-warning { background: #fffbeb; color: #92400e; border-left: 4px solid #f59e0b; }
+    .alert-success { background: #f0fdf4; color: #166534; border-left: 4px solid #22c55e; }
+
+    /* ---- Responsive ---- */
+    @media (max-width: 640px) {
+      nav.sidebar { display: none; }
+      main { margin-left: 0; }
+    }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="brand">
+    AO-Propre
+    <span>Marchés nettoyage Bretagne</span>
+  </div>
+
+  <div class="section-label">Principal</div>
+  <a href="/" class="{{ 'active' if request.url.path == '/' }}">Tableau de bord</a>
+
+  <div class="section-label">Gestion</div>
+  <a href="/clients"  class="{{ 'active' if '/clients'  in request.url.path }}">Clients</a>
+  <a href="/annonces" class="{{ 'active' if '/annonces' in request.url.path }}">Annonces</a>
+  <a href="/dossiers" class="{{ 'active' if '/dossiers' in request.url.path }}">Dossiers</a>
+
+  <div class="spacer"></div>
+  <div class="version">v1.0 — local</div>
+</nav>
+
+<main>
+  <header class="topbar">
+    <h1>{% block page_title %}AO-Propre{% endblock %}</h1>
+    <div>{% block topbar_actions %}{% endblock %}</div>
+  </header>
+
+  <div class="content">
+    {% block content %}{% endblock %}
+  </div>
+</main>
+
+</body>
+</html>
