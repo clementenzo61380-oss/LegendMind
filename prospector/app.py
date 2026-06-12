@@ -30,8 +30,20 @@ async def lifespan(app: FastAPI):
     init_db()
     Path("generated_docs").mkdir(exist_ok=True)
     Path("data").mkdir(exist_ok=True)
+
+    # Auto-prospection en tâche de fond (open data uniquement — voir services/auto_prospect.py)
+    import asyncio
+    from services.auto_prospect import auto_prospect_loop
+    task = asyncio.create_task(auto_prospect_loop())
+
     print("\n✅ PROSPECTOR démarré — http://127.0.0.1:8000\n")
     yield
+
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(

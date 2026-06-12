@@ -239,6 +239,23 @@ async def import_open_data(req: OpenDataRequest):
     }
 
 
+@router.get("/auto-prospect/status")
+def auto_prospect_status():
+    """Statut du moteur d'auto-prospection (dernier passage, prochains, total importé)."""
+    from services.auto_prospect import STATUS
+    return STATUS
+
+
+@router.post("/auto-prospect/run")
+async def auto_prospect_run():
+    """Déclenche immédiatement un passage d'auto-prospection."""
+    from services.auto_prospect import run_auto_prospect, STATUS
+    if STATUS["running"]:
+        return {"message": "Un passage est déjà en cours", "status": STATUS}
+    result = await run_auto_prospect()
+    return {"message": "Passage terminé", "result": result}
+
+
 @router.get("/{lead_id}/suggest-artisan")
 async def suggest_artisan_for_lead(lead_id: int):
     """Suggère les meilleurs artisans pour un lead donné via IA."""

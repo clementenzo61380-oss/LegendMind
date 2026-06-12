@@ -7,6 +7,7 @@ Application locale pour apporteur d'affaires BTP — Rennes Métropole (35).
 | Module | Description |
 |---|---|
 | 🎯 Leads | Scoring automatique, import IA (copier-coller), veille open data Sitadel |
+| ⚙️ Auto-prospection | Veille en tâche de fond : import + dédup + qualification automatiques toutes les 6h |
 | 🔨 Artisans | Enrichissement Sirene (INSEE), génération de messages d'approche IA |
 | 📄 Contrats | Génération DOCX + PDF, suivi brouillon → envoyé → signé |
 | 💰 Commissions | Échéancier, relances IA (J+30/J+45/J+60), mise en demeure |
@@ -50,7 +51,25 @@ APPORTEUR_EMAIL=contact@exemple.fr
 
 # Taux de commission par défaut
 COMMISSION_DEFAUT=5.0
+
+# Auto-prospection (tâche de fond)
+AUTO_PROSPECT_ENABLED=true       # Active la veille automatique
+AUTO_PROSPECT_INTERVAL_HOURS=6   # Fréquence des passages
+AUTO_QUALIFY_SCORE=70            # Score à partir duquel un lead passe en "qualifié" tout seul
 ```
+
+## Auto-prospection : ce qui est automatisé (et ce qui ne peut pas l'être)
+
+**Automatisé** (tourne tout seul tant que l'app est lancée) :
+- Interrogation de l'open data Sitadel toutes les 6h (permis de construire = futurs chantiers)
+- Déduplication contre les leads déjà en base
+- Scoring + passage automatique en "qualifié" si score ≥ 70
+- Alertes dashboard sur les leads à traiter
+
+**Volontairement NON automatisé** (obligations légales) :
+- Scraping Facebook / Leboncoin → interdit par leurs CGU (utilisez l'import IA copier-coller)
+- Envoi automatique d'emails/SMS aux particuliers → interdit sans consentement préalable (RGPD/LCEN).
+  Tous les messages sont générés en **draft** : c'est vous qui validez et envoyez.
 
 ## Import CSV Artisans
 

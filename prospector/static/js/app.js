@@ -590,6 +590,57 @@ async function importOD() {
   }
 }
 
+// ─── AUTO-PROSPECTION ─────────────────────────────────────────────────────
+async function showAutoProspect() {
+  let status;
+  try {
+    status = await api('GET', '/leads/auto-prospect/status');
+  } catch (e) {
+    toast('Erreur statut : ' + e.message, 'err');
+    return;
+  }
+  const last = status.last_result;
+  openModal('⚙️ Auto-prospection (open data)',
+    `<p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+       La veille tourne en tâche de fond : elle interroge l'open data Sitadel,
+       déduplique, importe et qualifie automatiquement les leads à fort score.<br>
+       <strong>Périmètre légal :</strong> open data uniquement — aucun scraping, aucun envoi automatique.</p>
+     <div class="two-col" style="margin-bottom:12px">
+       <div>
+         <p><strong>État :</strong> ${status.enabled ? (status.running ? '🔄 Passage en cours…' : '🟢 Active') : '🔴 Désactivée (.env)'}</p>
+         <p><strong>Dernier passage :</strong> ${status.last_run ? fmtDate(status.last_run) + ' ' + status.last_run.slice(11,16) : 'Jamais'}</p>
+         <p><strong>Prochain passage :</strong> ${status.next_run ? fmtDate(status.next_run) + ' ' + status.next_run.slice(11,16) : '—'}</p>
+       </div>
+       <div>
+         <p><strong>Total importé :</strong> ${status.total_imported} leads</p>
+         ${last ? `<p><strong>Dernier résultat :</strong> ${last.fetched} récupérés, ${last.imported} importés, ${last.duplicates} doublons, ${last.auto_qualified} auto-qualifiés</p>` : ''}
+       </div>
+     </div>
+     ${last?.errors?.length ? `<div class="alert alert-i"><span>ℹ️</span><span>${last.errors.join('<br>')}</span></div>` : ''}
+     <div id="ap-result"></div>`,
+    `<button class="btn btn-outline" onclick="closeModal()">Fermer</button>
+     <button class="btn btn-primary" id="ap-run-btn" onclick="runAutoProspect()">▶️ Lancer un passage maintenant</button>`
+  );
+}
+
+async function runAutoProspect() {
+  const btn = el('ap-run-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Passage en cours…';
+  try {
+    const data = await api('POST', '/leads/auto-prospect/run');
+    const r = data.result;
+    el('ap-result').innerHTML = r
+      ? `<div class="alert alert-s" style="margin-top:10px">✅ ${r.imported} nouveau(x) lead(s) importé(s) — ${r.duplicates} doublon(s) ignoré(s) — ${r.auto_qualified} auto-qualifié(s)</div>`
+      : `<div class="alert alert-i" style="margin-top:10px">${data.message}</div>`;
+    toast(`Auto-prospection : ${r ? r.imported + ' leads importés' : data.message} ✓`);
+    loadLeads();
+  } catch (e) {
+    toast('Erreur : ' + e.message, 'err');
+  } finally {
+    btn.disabled = false; btn.innerHTML = '▶️ Lancer un passage maintenant';
+  }
+}
+
 // ─── MODULE: ARTISANS ─────────────────────────────────────────────────────
 async function loadArtisans() {
   el('artisans-table-body').innerHTML = '<tr><td colspan="9" style="padding:20px;text-align:center;color:var(--text-muted)">Chargement…</td></tr>';
