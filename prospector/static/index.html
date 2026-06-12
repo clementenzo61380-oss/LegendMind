@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PROSPECTOR — BTP Rennes</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<!-- ─── Sidebar ──────────────────────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <h1>⚡ PROSPECTOR</h1>
+    <p>Apporteur d'affaires BTP<br>Rennes Métropole</p>
+  </div>
+  <nav>
+    <div class="nav-section">Tableau de bord</div>
+    <div class="nav-item active" data-mod="dashboard">
+      <span class="ni">🏠</span> Dashboard
+      <span class="nav-badge" id="alert-badge" style="display:none">0</span>
+    </div>
+
+    <div class="nav-section">Prospection</div>
+    <div class="nav-item" data-mod="leads">
+      <span class="ni">🎯</span> Leads clients
+    </div>
+    <div class="nav-item" data-mod="artisans">
+      <span class="ni">🔨</span> Artisans
+    </div>
+
+    <div class="nav-section">Gestion</div>
+    <div class="nav-item" data-mod="contracts">
+      <span class="ni">📄</span> Contrats
+    </div>
+    <div class="nav-item" data-mod="commissions">
+      <span class="ni">💰</span> Commissions
+    </div>
+
+    <div class="nav-section">IA</div>
+    <div class="nav-item" data-mod="chat">
+      <span class="ni">🤖</span> Assistant IA
+    </div>
+  </nav>
+  <div class="sidebar-bottom">v1.0 · SQLite local</div>
+</aside>
+
+<!-- ─── Main ─────────────────────────────────────────────────────────────── -->
+<main class="main">
+
+  <!-- ═══ DASHBOARD ═══ -->
+  <section id="panel-dashboard" class="panel">
+    <div class="panel-header">
+      <h2>🏠 Dashboard</h2>
+      <div class="panel-actions">
+        <button class="btn btn-outline btn-sm" onclick="loadDashboard()">🔄 Actualiser</button>
+      </div>
+    </div>
+    <div class="panel-content">
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="stat-card" id="stat-leads-actifs">
+          <div class="lbl">Leads actifs</div><div class="val">—</div>
+        </div>
+        <div class="stat-card" id="stat-artisans">
+          <div class="lbl">Artisans</div><div class="val">—</div>
+        </div>
+        <div class="stat-card warning" id="stat-commissions">
+          <div class="lbl">En attente</div><div class="val">—</div>
+        </div>
+        <div class="stat-card success" id="stat-ca">
+          <div class="lbl">CA ce mois</div><div class="val">—</div>
+        </div>
+      </div>
+
+      <!-- Pipeline -->
+      <div class="section-title">Pipeline des leads</div>
+      <div id="pipeline" class="pipeline">
+        <div style="padding:24px;color:var(--text-muted)">Chargement…</div>
+      </div>
+
+      <!-- Two columns -->
+      <div class="two-col">
+        <!-- Alertes -->
+        <div>
+          <div class="section-title">⚠️ Alertes</div>
+          <div id="alerts-container" class="alerts-list">
+            <div style="color:var(--text-muted);font-size:13px">Chargement…</div>
+          </div>
+        </div>
+        <!-- Raccourcis -->
+        <div>
+          <div class="section-title">Actions rapides</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn btn-primary" onclick="navigate('leads');showLeadForm()">➕ Nouveau lead</button>
+            <button class="btn btn-secondary" onclick="navigate('leads');showExtractModal()">🤖 Extraire lead depuis texte</button>
+            <button class="btn btn-outline" onclick="navigate('leads');showOpenDataModal()">🏗️ Veille open data (permis)</button>
+            <button class="btn btn-outline" onclick="navigate('artisans');showArtisanForm()">➕ Ajouter un artisan</button>
+            <button class="btn btn-outline" onclick="navigate('contracts');showGenerateContract()">📄 Générer un contrat</button>
+            <button class="btn btn-outline" onclick="estimateChantier()">💰 Estimer un chantier (IA)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ LEADS ═══ -->
+  <section id="panel-leads" class="panel">
+    <div class="panel-header">
+      <h2>🎯 Leads clients</h2>
+      <div class="panel-actions">
+        <button class="btn btn-secondary btn-sm" onclick="showAutoProspect()">⚙️ Auto-prospection</button>
+        <button class="btn btn-outline btn-sm" onclick="showOpenDataModal()">🏗️ Open Data</button>
+        <button class="btn btn-outline btn-sm" onclick="showExtractModal()">🤖 Import IA</button>
+        <button class="btn btn-primary" onclick="showLeadForm()">➕ Nouveau lead</button>
+      </div>
+    </div>
+    <div class="panel-content">
+      <div class="table-wrap">
+        <div class="table-toolbar">
+          <span id="leads-count" style="font-size:12px;color:var(--text-muted);font-weight:600">— leads</span>
+          <div style="flex:1"></div>
+          <div class="filter-bar">
+            <select id="filter-statut" style="min-width:140px">
+              <option value="">Tous les statuts</option>
+              <option value="nouveau">Nouveau</option>
+              <option value="qualifie">Qualifié</option>
+              <option value="transmis">Transmis</option>
+              <option value="devis_envoye">Devis envoyé</option>
+              <option value="signe">Signé</option>
+              <option value="commission_payee">Commission payée</option>
+              <option value="perdu">Perdu</option>
+            </select>
+            <select id="filter-score" style="min-width:120px">
+              <option value="">Score (tous)</option>
+              <option value="70">Score ≥ 70</option>
+              <option value="50">Score ≥ 50</option>
+              <option value="30">Score ≥ 30</option>
+            </select>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Score</th>
+                <th>Travaux</th>
+                <th>Localisation</th>
+                <th>Contact</th>
+                <th>Urgence</th>
+                <th>Statut</th>
+                <th>Artisan</th>
+                <th>Commission</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="leads-table-body">
+              <tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text-muted)">Chargement…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ ARTISANS ═══ -->
+  <section id="panel-artisans" class="panel">
+    <div class="panel-header">
+      <h2>🔨 Artisans partenaires</h2>
+      <div class="panel-actions">
+        <button class="btn btn-outline btn-sm" onclick="showCSVImport()">⬇️ Import CSV</button>
+        <button class="btn btn-primary" onclick="showArtisanForm()">➕ Ajouter</button>
+      </div>
+    </div>
+    <div class="panel-content">
+      <div class="table-wrap">
+        <div class="table-toolbar">
+          <span id="artisans-count" style="font-size:12px;color:var(--text-muted);font-weight:600">— artisans</span>
+          <div style="flex:1"></div>
+          <div class="filter-bar">
+            <select id="filter-contrat" style="min-width:150px">
+              <option value="">Tous</option>
+              <option value="true">Contrat signé</option>
+              <option value="false">Sans contrat</option>
+            </select>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Nom / Société</th>
+                <th>Métier</th>
+                <th>Ville</th>
+                <th>SIREN</th>
+                <th>Fiabilité</th>
+                <th>Contrat</th>
+                <th>Commission</th>
+                <th>Paiement</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="artisans-table-body">
+              <tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text-muted)">Chargement…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ CONTRATS ═══ -->
+  <section id="panel-contracts" class="panel">
+    <div class="panel-header">
+      <h2>📄 Contrats d'apporteur d'affaires</h2>
+      <div class="panel-actions">
+        <button class="btn btn-primary" onclick="showGenerateContract()">➕ Générer un contrat</button>
+      </div>
+    </div>
+    <div class="panel-content">
+      <div class="disclaimer" style="margin-bottom:16px">
+        ⚠️ Les contrats générés sont des modèles indicatifs — faites-les valider par un professionnel du droit.
+      </div>
+      <div class="table-wrap">
+        <div class="table-toolbar">
+          <span id="contracts-count" style="font-size:12px;color:var(--text-muted);font-weight:600">— contrats</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Artisan</th>
+                <th>Métier</th>
+                <th>Statut</th>
+                <th>Commission</th>
+                <th>Créé le</th>
+                <th>Signé le</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="contracts-table-body">
+              <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Chargement…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ COMMISSIONS ═══ -->
+  <section id="panel-commissions" class="panel">
+    <div class="panel-header">
+      <h2>💰 Commissions & Relances</h2>
+      <div class="panel-actions">
+        <button class="btn btn-primary" onclick="showAddCommission()">➕ Enregistrer commission</button>
+      </div>
+    </div>
+    <div class="panel-content">
+      <!-- Summary -->
+      <div class="stats-grid" style="margin-bottom:16px">
+        <div class="stat-card success">
+          <div class="lbl">Total encaissé</div>
+          <div class="val" id="total-encaisse">—</div>
+        </div>
+        <div class="stat-card warning">
+          <div class="lbl">En attente / retard</div>
+          <div class="val" id="total-pipeline">—</div>
+        </div>
+      </div>
+      <div id="monthly-chart" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px"></div>
+
+      <div class="table-wrap">
+        <div class="table-toolbar">
+          <span id="commissions-count" style="font-size:12px;color:var(--text-muted);font-weight:600">— commissions</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Artisan</th>
+                <th>Travaux</th>
+                <th>Montant</th>
+                <th>Échéance</th>
+                <th>Statut</th>
+                <th>Relances</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="commissions-table-body">
+              <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Chargement…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ CHAT IA ═══ -->
+  <section id="panel-chat" class="panel">
+    <div class="panel-header">
+      <h2>🤖 Assistant IA</h2>
+      <div class="panel-actions">
+        <button class="btn btn-outline btn-sm" onclick="S.chatHistory=[];el('chat-messages').innerHTML='';addChatMessage('assistant','Bonjour ! Je suis votre assistant PROSPECTOR. Comment puis-je vous aider ?')">🗑 Effacer</button>
+        <button class="btn btn-outline btn-sm" onclick="estimateChantier()">💰 Estimer chantier</button>
+      </div>
+    </div>
+    <div class="panel-content" style="padding:0;display:flex;flex-direction:column;height:100%;overflow:hidden">
+      <div class="chat-wrap" style="border-radius:0;border:none;border-top:1px solid var(--border)">
+        <div id="chat-messages" class="chat-msgs">
+          <div class="msg msg-assistant">Bonjour ! Je suis votre assistant PROSPECTOR.
+
+Je peux vous aider à :
+• Analyser un texte et extraire un lead
+• Rédiger un email de relance ou d'approche
+• Suggérer le bon artisan pour un chantier
+• Estimer le montant d'un chantier
+• Répondre à toute question métier
+
+Comment puis-je vous aider ?</div>
+        </div>
+        <div class="chat-input-area">
+          <div class="chat-quick">
+            <button class="btn btn-sm btn-outline" onclick="quickChat('Rédige un email de relance pour une commission impayée depuis 35 jours, montant 1200€, artisan plombier.')">✍️ Relance commission</button>
+            <button class="btn btn-sm btn-outline" onclick="quickChat('Quels leads nécessitent une action urgente aujourd\'hui ?')">⚡ Leads urgents</button>
+            <button class="btn btn-sm btn-outline" onclick="quickChat('Donne-moi un résumé de mon activité et des actions prioritaires à faire.')">📊 Résumé activité</button>
+            <button class="btn btn-sm btn-outline" onclick="showExtractModal()">📋 Extraire lead IA</button>
+          </div>
+          <div class="chat-row">
+            <textarea id="chat-input" placeholder="Posez une question, collez un texte à analyser, demandez de rédiger un message…" rows="2"></textarea>
+            <button class="btn btn-primary" id="chat-send" onclick="sendChat()">Envoyer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ─── Drawer (formulaires) ──────────────────────────────────────────────── -->
+<div id="drawer-overlay" class="drawer-overlay"></div>
+<div id="drawer" class="drawer">
+  <div class="drawer-hdr">
+    <h3 id="drawer-title">Formulaire</h3>
+    <button class="btn btn-ghost btn-sm" id="drawer-close">✕</button>
+  </div>
+  <div id="drawer-body" class="drawer-body"></div>
+  <div class="drawer-ftr">
+    <button class="btn btn-outline" onclick="closeDrawer()">Annuler</button>
+    <button class="btn btn-primary" id="drawer-save">Enregistrer</button>
+  </div>
+</div>
+
+<!-- ─── Modal ─────────────────────────────────────────────────────────────── -->
+<div id="modal-overlay" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h3 id="modal-title">Titre</h3>
+      <button class="btn btn-ghost btn-sm" id="modal-close">✕</button>
+    </div>
+    <div id="modal-body" class="modal-body"></div>
+    <div id="modal-actions" class="modal-ftr">
+      <button class="btn btn-outline" onclick="closeModal()">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Toasts ────────────────────────────────────────────────────────────── -->
+<div id="toasts" class="toasts"></div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>

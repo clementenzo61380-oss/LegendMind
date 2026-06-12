@@ -1,0 +1,53 @@
+{
+  "budget": {
+    "seuil_tres_haut": 50000,
+    "seuil_haut": 20000,
+    "seuil_moyen": 10000,
+    "seuil_bas": 3000,
+    "points_tres_haut": 35,
+    "points_haut": 25,
+    "points_moyen": 15,
+    "points_bas": 8
+  },
+  "urgence": {
+    "points_par_niveau": 5
+  },
+  "coordonnees": {
+    "points_tel": 15,
+    "points_email": 8,
+    "points_nom": 7
+  },
+  "localisation": {
+    "villes_bonus": [
+      "rennes", "cesson-sévigné", "cesson sevigne", "saint-grégoire", "saint gregoire",
+      "bruz", "chartres-de-bretagne", "chartres de bretagne", "pacé", "pace",
+      "betton", "thorigné-fouillard", "thorigne", "acigné", "acigne",
+      "noyal-châtillon", "noyal chatillon", "vezin-le-coquet", "vezin",
+      "montgermont", "mordelles", "parthenay-de-bretagne"
+    ],
+    "bonus": 10
+  },
+  "type_travaux": {
+    "pompe à chaleur": 20,
+    "pac": 20,
+    "rénovation énergétique": 18,
+    "renovation energetique": 18,
+    "isolation": 16,
+    "extension": 22,
+    "construction neuve": 25,
+    "toiture": 14,
+    "couverture": 14,
+    "chauffage": 14,
+    "salle de bain": 12,
+    "cuisine": 12,
+    "électricité": 10,
+    "electricite": 10,
+    "plomberie": 10,
+    "menuiserie": 10,
+    "fenêtres": 10,
+    "fenetres": 10,
+    "ravalement": 12,
+    "terrasse": 8,
+    "aménagement": 8
+  }
+}
