@@ -1,0 +1,6 @@
+.env
+aopilot.db
+outputs/*
+!outputs/.gitkeep
+__pycache__/
+.venv/

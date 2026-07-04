@@ -1,0 +1,18 @@
+Sujet: Re: Appel d'offres « {objet} » — il reste {jours_restants} jours
+
+Bonjour {prenom_contact},
+
+Je me permets de revenir vers vous au sujet de l'appel d'offres de {acheteur} :
+
+« {objet} »
+
+La date limite approche ({deadline}) : il reste {jours_restants} jours pour déposer
+une offre. C'est encore jouable, mais chaque jour compte pour construire un mémoire
+technique solide.
+
+Si vous envisagez de répondre, je peux prendre en charge la rédaction du mémoire
+dès maintenant et vous livrer dans les temps.
+
+Un simple retour de votre part, même négatif, me permettra de clore le sujet.
+
+Bien cordialement,

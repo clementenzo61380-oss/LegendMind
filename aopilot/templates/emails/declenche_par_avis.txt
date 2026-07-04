@@ -1,0 +1,22 @@
+Sujet: Appel d'offres « {objet} » — un mémoire technique qui marque des points
+
+Bonjour {prenom_contact},
+
+{acheteur} vient de publier un appel d'offres qui correspond exactement à votre activité :
+
+« {objet} »
+
+La date limite de réponse est fixée au {deadline}, soit dans {jours_restants} jours.
+
+Sur ce type de marché, le mémoire technique pèse souvent 40 à 60 % de la note finale.
+C'est précisément mon métier : je rédige des mémoires techniques sur mesure pour les
+TPE/PME du secteur {secteur}, en valorisant vos moyens réels et votre méthodologie.
+
+Concrètement, je peux :
+- analyser le dossier de consultation (DCE) et décoder les critères de notation,
+- rédiger un mémoire structuré qui répond point par point aux attentes de l'acheteur,
+- vous livrer un document prêt à déposer, dans les délais.
+
+Auriez-vous 15 minutes cette semaine pour en parler ?
+
+Bien cordialement,
