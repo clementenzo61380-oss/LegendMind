@@ -93,7 +93,7 @@ def page_dashboard() -> None:
     with g1:
         st.altair_chart(
             graphiques.graphique_entonnoir(graphiques.preparer_entonnoir(compte)),
-            width="stretch",
+            use_container_width=True,
         )
     with g2:
         echeances = graphiques.preparer_echeances(scraper.lister_marches())
@@ -137,7 +137,7 @@ def page_dashboard() -> None:
         st.caption("💶 CA facturé par mois (payé / dû)")
         if donnees_ca:
             st.altair_chart(
-                graphiques.graphique_ca_mensuel(donnees_ca), width="stretch"
+                graphiques.graphique_ca_mensuel(donnees_ca), use_container_width=True
             )
         else:
             st.caption("Aucune facture datée.")
@@ -147,7 +147,7 @@ def page_dashboard() -> None:
         )
         st.caption("👥 Prospects par étape du cycle")
         st.altair_chart(
-            graphiques.graphique_prospects(donnees_prospects), width="stretch"
+            graphiques.graphique_prospects(donnees_prospects), use_container_width=True
         )
 
     if par_departement:
