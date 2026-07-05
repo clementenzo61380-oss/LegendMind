@@ -124,7 +124,39 @@ def init_db(db_path: Path | str | None = None) -> None:
                 date_facture TEXT,
                 statut   TEXT NOT NULL DEFAULT 'dû'
             );
+
+            -- Réglages persistants (clé/valeur) : filtres de scan, etc.
+            CREATE TABLE IF NOT EXISTS reglages (
+                cle    TEXT PRIMARY KEY,
+                valeur TEXT
+            );
             """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def lire_reglage(cle: str, defaut: str = "") -> str:
+    """Lit un réglage persistant (retourne `defaut` s'il n'existe pas)."""
+    conn = get_connection()
+    try:
+        ligne = conn.execute(
+            "SELECT valeur FROM reglages WHERE cle = ?", (cle,)
+        ).fetchone()
+        return ligne["valeur"] if ligne else defaut
+    finally:
+        conn.close()
+
+
+def ecrire_reglage(cle: str, valeur: str) -> None:
+    """Écrit (ou remplace) un réglage persistant."""
+    conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO reglages (cle, valeur) VALUES (?, ?) "
+            "ON CONFLICT(cle) DO UPDATE SET valeur = excluded.valeur",
+            (cle, valeur),
         )
         conn.commit()
     finally:

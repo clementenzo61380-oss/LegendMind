@@ -17,8 +17,10 @@ from modules.database import (
     ETAPES_PIPELINE,
     STATUTS_MARCHE,
     STATUTS_PROSPECT,
+    ecrire_reglage,
     get_connection,
     init_db,
+    lire_reglage,
 )
 
 # Charge .env (ANTHROPIC_API_KEY) depuis la racine du projet
@@ -220,18 +222,26 @@ def page_radar() -> None:
     st.title("📡 Radar BOAMP")
     bandeau_relances()
 
+    # Filtres persistants : les dernières valeurs utilisées sont rechargées
     with st.expander("Filtres de scan", expanded=True):
         mots = st.text_input(
             "Mots-clés (séparés par des virgules)",
-            value=", ".join(scraper.MOTS_CLES_DEFAUT),
+            value=lire_reglage("scan_mots_cles", ", ".join(scraper.MOTS_CLES_DEFAUT)),
         )
         deps = st.text_input(
             "Départements (séparés par des virgules)",
-            value=", ".join(scraper.DEPARTEMENTS_DEFAUT),
+            value=lire_reglage("scan_departements", ", ".join(scraper.DEPARTEMENTS_DEFAUT)),
         )
-        jours = st.slider("Fenêtre de publication (jours)", 1, 60, scraper.FENETRE_JOURS_DEFAUT)
+        jours = st.slider(
+            "Fenêtre de publication (jours)", 1, 60,
+            int(lire_reglage("scan_jours", str(scraper.FENETRE_JOURS_DEFAUT))),
+        )
 
     if st.button("🔍 Scanner maintenant", type="primary"):
+        # Mémorise les filtres pour les prochaines sessions
+        ecrire_reglage("scan_mots_cles", mots)
+        ecrire_reglage("scan_departements", deps)
+        ecrire_reglage("scan_jours", str(jours))
         with st.spinner("Interrogation de l'API BOAMP..."):
             try:
                 avis = scraper.scanner_boamp(
@@ -251,9 +261,17 @@ def page_radar() -> None:
         nb = scraper.marquer_tous_vus()
         st.toast(f"{nb} marché(s) passé(s) en « vu ».")
         st.rerun()
+    recherche = st.text_input("🔎 Rechercher (objet ou acheteur)", "")
     marches = scraper.lister_marches(None if filtre == "(tous)" else filtre)
+    if recherche:
+        terme = recherche.lower()
+        marches = [
+            m for m in marches
+            if terme in (m["objet"] or "").lower()
+            or terme in (m["nomacheteur"] or "").lower()
+        ]
     if not marches:
-        st.info("Aucun marché en base. Lancez un scan.")
+        st.info("Aucun marché ne correspond." if recherche else "Aucun marché en base. Lancez un scan.")
         return
 
     for m in marches:
@@ -506,6 +524,13 @@ def page_dce() -> None:
     for analyse in dce.lister_analyses():
         libelle = f"{analyse['date_analyse']} — {analyse['nom_fichiers'] or 'sans nom'}"
         with st.expander(libelle):
+            st.download_button(
+                "⬇️ Télécharger l'analyse (.md)",
+                analyse["resultat"],
+                file_name=f"analyse_dce_{analyse['id']}.md",
+                mime="text/markdown",
+                key=f"dl_analyse_{analyse['id']}",
+            )
             st.markdown(analyse["resultat"])
 
 
