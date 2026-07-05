@@ -13,6 +13,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from modules import (
+    campagne,
     commissions,
     dce,
     emails,
@@ -580,7 +581,12 @@ def page_emails() -> None:
     st.title("✉️ Générateur d'emails")
     bandeau_relances()
 
-    onglet_generer, onglet_editer = st.tabs(["Générer", "Éditer les templates"])
+    onglet_campagne, onglet_generer, onglet_editer = st.tabs(
+        ["📬 Campagne par marché", "Générer (unitaire)", "Éditer les templates"]
+    )
+
+    with onglet_campagne:
+        _onglet_campagne()
 
     with onglet_editer:
         choix = st.selectbox("Template", list(emails.TEMPLATES_EMAILS.values()))
@@ -637,6 +643,97 @@ def page_emails() -> None:
                 st.toast(f"{prospect['entreprise']} → {nouveau}")
                 st.rerun()
         st.code(corps, language=None)  # bloc code Streamlit = bouton copier intégré
+
+
+def _onglet_campagne() -> None:
+    """Rapprochement automatique marché ↔ prospects + génération en masse."""
+    st.markdown(
+        "Choisissez un marché : l'app identifie **automatiquement** les "
+        "prospects concernés de votre base (même secteur) et génère un email "
+        "pour chacun."
+    )
+    marches = scraper.lister_marches()
+    if not marches:
+        st.info("Aucun marché en base. Lancez d'abord un scan sur la page Radar.")
+        return
+    choix = {
+        f"{badge_deadline(m['datelimitereponse'])} {m['objet'][:70]} ({m['idweb']})": m
+        for m in marches
+    }
+    marche = choix[st.selectbox("Marché", list(choix))]
+
+    secteur = campagne.detecter_secteur(marche["objet"] or "")
+    if not secteur:
+        st.warning(
+            "Secteur non reconnu dans l'objet du marché — la campagne cible "
+            "par secteur. Vérifiez le secteur de vos prospects ou utilisez "
+            "l'onglet « Générer (unitaire) »."
+        )
+        return
+    cibles = campagne.prospects_pour_marche(marche)
+    st.caption(f"Secteur détecté : **{secteur}** — {len(cibles)} prospect(s) concerné(s).")
+    if not cibles:
+        st.info(
+            f"Aucun prospect « {secteur} » démarchable en base. Utilisez la "
+            "Prospection auto (page Prospects) pour en trouver."
+        )
+        return
+
+    libelles = {
+        f"{p['entreprise']} ({p['email'] or 'pas d’email'})": p for p in cibles
+    }
+    selection = st.multiselect(
+        "Entreprises ciblées", list(libelles), default=list(libelles)
+    )
+    mode = st.radio(
+        "Rédaction",
+        ["Template (gratuit, instantané)", "IA personnalisée (~0,02 $ / email)"],
+        horizontal=True,
+    )
+    mode_code = "ia" if mode.startswith("IA") else "template"
+
+    if st.button("📬 Générer la campagne", type="primary", disabled=not selection):
+        cibles_choisies = [libelles[l] for l in selection]
+        barre = st.progress(0.0, text="Génération...")
+
+        def progression(i: int, total: int, nom: str) -> None:
+            barre.progress(i / total, text=f"{i}/{total} — {nom}")
+
+        try:
+            nb = campagne.generer_campagne(marche, cibles_choisies, mode_code, progression)
+            barre.progress(1.0, text="Terminé.")
+            st.success(f"{nb} email(s) généré(s) (les doublons existants sont conservés).")
+        except RuntimeError as exc:  # clé API absente (mode IA)
+            st.error(str(exc))
+        except Exception as exc:
+            st.error(f"Erreur pendant la génération : {exc}")
+
+    # --- Emails de la campagne, prêts à envoyer ---
+    generes = campagne.lister_emails_campagne(marche["idweb"])
+    if generes:
+        st.subheader(f"Emails prêts ({len(generes)})")
+        for e in generes:
+            icone = "📨" if e["statut"] == "généré" else "✅"
+            with st.expander(f"{icone} {e['entreprise']} — {e['sujet'][:60]}"):
+                st.text_area(
+                    "Corps", e["corps"], height=220, key=f"camp_corps_{e['id']}",
+                    disabled=True,
+                )
+                lien = emails.generer_mailto(
+                    e["email_prospect"] or "", e["sujet"] or "", e["corps"] or ""
+                )
+                c1, c2, c3 = st.columns(3)
+                c1.markdown(f"[📨 Ouvrir dans le client mail]({lien})")
+                if e["statut"] == "généré" and c2.button(
+                    "✅ Envoyé + contacté", key=f"camp_env_{e['id']}",
+                    help="Marque l'email envoyé et le prospect contacté (relance J+3)",
+                ):
+                    campagne.marquer_email_envoye(e["id"])
+                    prospects.changer_statut_prospect(e["prospect_id"], "contacté")
+                    st.rerun()
+                if c3.button("🗑️", key=f"camp_del_{e['id']}"):
+                    campagne.supprimer_email_campagne(e["id"])
+                    st.rerun()
 
 
 # ---------------------------------------------------------------------------

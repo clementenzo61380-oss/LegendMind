@@ -131,6 +131,18 @@ def init_db(db_path: Path | str | None = None) -> None:
                 valeur TEXT
             );
 
+            -- Emails générés par campagne (rapprochement marché <-> prospects)
+            CREATE TABLE IF NOT EXISTS emails_generes (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                marche_idweb  TEXT REFERENCES marches(idweb) ON DELETE SET NULL,
+                prospect_id   INTEGER REFERENCES prospects(id) ON DELETE CASCADE,
+                sujet         TEXT,
+                corps         TEXT,
+                mode          TEXT,
+                statut        TEXT NOT NULL DEFAULT 'généré',
+                date_creation TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
             -- Commissions sur dossiers gagnés (modèle : % du montant du marché)
             CREATE TABLE IF NOT EXISTS commissions (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
