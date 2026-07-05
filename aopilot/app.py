@@ -12,7 +12,7 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from modules import dce, emails, graphiques, memoire, prospects, scraper
+from modules import commissions, dce, emails, graphiques, memoire, prospects, scraper
 from modules.database import (
     STATUTS_MARCHE,
     STATUTS_PROSPECT,
@@ -72,19 +72,19 @@ def page_dashboard() -> None:
         memoires_en_cours = conn.execute(
             "SELECT COUNT(*) FROM memoires WHERE statut = 'en cours'"
         ).fetchone()[0]
-        ca_facture = conn.execute("SELECT COALESCE(SUM(montant), 0) FROM factures").fetchone()[0]
-        ca_paye = conn.execute(
-            "SELECT COALESCE(SUM(montant), 0) FROM factures WHERE statut = 'payé'"
-        ).fetchone()[0]
     finally:
         conn.close()
 
+    totaux_commissions = commissions.totaux()
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Marchés détectés (7 j)", marches_semaine)
     col2.metric("Relances dues aujourd'hui", len(prospects.relances_dues()))
     col3.metric("Mémoires en cours", memoires_en_cours)
-    col4.metric("CA facturé", f"{ca_facture:,.0f} €".replace(",", " "),
-                delta=f"{ca_paye:,.0f} € encaissés".replace(",", " "))
+    col4.metric(
+        "Commissions encaissées",
+        f"{totaux_commissions['encaissees']:,.0f} €".replace(",", " "),
+        delta=f"{totaux_commissions['en_attente']:,.0f} € en attente".replace(",", " "),
+    )
 
     # --- Pipeline visuel (entonnoir) ---
     st.subheader("Pipeline")
@@ -159,7 +159,48 @@ def page_dashboard() -> None:
             st.caption("📅 Détections par semaine")
             st.bar_chart(par_semaine)
 
-    # --- Factures (saisie manuelle) ---
+    # --- Commissions sur dossiers gagnés ---
+    st.subheader("💰 Commissions (dossiers gagnés)")
+    st.caption(
+        "Une commission par dossier réussi. Saisie depuis la page Radar quand "
+        "un marché passe en « gagné », ou manuellement ci-dessous."
+    )
+    with st.form("form_commission_manuelle", clear_on_submit=True):
+        c1, c2, c3 = st.columns([3, 2, 2])
+        com_client = c1.text_input("Client")
+        com_montant = c2.number_input("Montant du marché (€)", min_value=0.0, step=1000.0)
+        com_taux = c3.number_input(
+            "Taux (%)", min_value=0.0, max_value=100.0,
+            value=commissions.taux_par_defaut(), step=0.5,
+        )
+        if st.form_submit_button("Ajouter la commission") and com_client and com_montant > 0 and com_taux > 0:
+            commissions.enregistrer_commission(com_client, com_montant, com_taux)
+            commissions.definir_taux_par_defaut(com_taux)
+            st.rerun()
+
+    liste_commissions = commissions.lister_commissions()
+    if liste_commissions:
+        for com in liste_commissions:
+            c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 2, 1])
+            c1.write(com["client"])
+            c1.caption(f"Marché : {com['marche_idweb'] or 'saisie manuelle'}")
+            c2.write(f"{com['montant_marche']:,.0f} € × {com['taux']:g} %".replace(",", " "))
+            c3.write(f"**{com['montant_commission']:,.0f} €**".replace(",", " "))
+            nouveau = c4.selectbox(
+                "Statut", commissions.STATUTS_COMMISSION,
+                index=commissions.STATUTS_COMMISSION.index(com["statut"]),
+                key=f"com_statut_{com['id']}", label_visibility="collapsed",
+            )
+            if nouveau != com["statut"]:
+                commissions.changer_statut_commission(com["id"], nouveau)
+                st.rerun()
+            if c5.button("🗑️", key=f"com_del_{com['id']}"):
+                commissions.supprimer_commission(com["id"])
+                st.rerun()
+    else:
+        st.caption("Aucune commission enregistrée — passez un marché en « gagné » sur la page Radar.")
+
+    # --- Factures (autres prestations facturées au forfait) ---
     st.subheader("Factures")
     with st.form("form_facture", clear_on_submit=True):
         c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
@@ -234,6 +275,9 @@ def _comptes_pipeline() -> dict[str, int]:
         ).fetchone()[0]
         paye = conn.execute(
             "SELECT COUNT(*) FROM factures WHERE statut = 'payé'"
+        ).fetchone()[0]
+        paye += conn.execute(
+            "SELECT COUNT(*) FROM commissions WHERE statut = 'payée'"
         ).fetchone()[0]
     finally:
         conn.close()
@@ -331,6 +375,32 @@ def page_radar() -> None:
             if c2.button("🗑️ Supprimer", key=f"marche_del_{m['idweb']}"):
                 scraper.supprimer_marche(m["idweb"])
                 st.rerun()
+            # Dossier gagné sans commission enregistrée : formulaire de saisie
+            if m["statut"] == "gagné" and not commissions.marche_a_commission(m["idweb"]):
+                with st.form(f"form_commission_{m['idweb']}"):
+                    st.markdown("💰 **Dossier gagné — enregistrer la commission**")
+                    f1, f2, f3 = st.columns([3, 2, 2])
+                    client = f1.text_input("Client (entreprise accompagnée)")
+                    montant = f2.number_input(
+                        "Montant du marché (€)", min_value=0.0, step=1000.0
+                    )
+                    taux = f3.number_input(
+                        "Taux (%)", min_value=0.0, max_value=100.0,
+                        value=commissions.taux_par_defaut(), step=0.5,
+                    )
+                    if montant > 0 and taux > 0:
+                        st.caption(
+                            f"Commission : **{commissions.montant_commission(montant, taux):,.0f} €**".replace(",", " ")
+                        )
+                    if st.form_submit_button("Enregistrer la commission"):
+                        if client and montant > 0 and taux > 0:
+                            commissions.enregistrer_commission(
+                                client, montant, taux, m["idweb"]
+                            )
+                            commissions.definir_taux_par_defaut(taux)
+                            st.rerun()
+                        else:
+                            st.error("Client, montant et taux sont obligatoires.")
 
 
 # ---------------------------------------------------------------------------

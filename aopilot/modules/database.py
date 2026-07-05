@@ -125,10 +125,21 @@ def init_db(db_path: Path | str | None = None) -> None:
                 statut   TEXT NOT NULL DEFAULT 'dû'
             );
 
-            -- Réglages persistants (clé/valeur) : filtres de scan, etc.
+            -- Réglages persistants (clé/valeur) : filtres de scan, taux, etc.
             CREATE TABLE IF NOT EXISTS reglages (
                 cle    TEXT PRIMARY KEY,
                 valeur TEXT
+            );
+
+            -- Commissions sur dossiers gagnés (modèle : % du montant du marché)
+            CREATE TABLE IF NOT EXISTS commissions (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                marche_idweb   TEXT REFERENCES marches(idweb) ON DELETE SET NULL,
+                client         TEXT NOT NULL,
+                montant_marche REAL NOT NULL,
+                taux           REAL NOT NULL,
+                statut         TEXT NOT NULL DEFAULT 'en attente',
+                date_creation  TEXT NOT NULL DEFAULT (datetime('now'))
             );
             """
         )
