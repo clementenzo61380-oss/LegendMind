@@ -12,9 +12,8 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from modules import dce, emails, memoire, prospects, scraper
+from modules import dce, emails, graphiques, memoire, prospects, scraper
 from modules.database import (
-    ETAPES_PIPELINE,
     STATUTS_MARCHE,
     STATUTS_PROSPECT,
     ecrire_reglage,
@@ -87,13 +86,25 @@ def page_dashboard() -> None:
     col4.metric("CA facturé", f"{ca_facture:,.0f} €".replace(",", " "),
                 delta=f"{ca_paye:,.0f} € encaissés".replace(",", " "))
 
-    # --- Pipeline visuel ---
+    # --- Pipeline visuel (entonnoir) ---
     st.subheader("Pipeline")
     compte = _comptes_pipeline()
-    colonnes = st.columns(len(ETAPES_PIPELINE))
-    for colonne, etape in zip(colonnes, ETAPES_PIPELINE):
-        colonne.metric(etape.capitalize(), compte.get(etape, 0))
-    st.caption(" → ".join(ETAPES_PIPELINE))
+    g1, g2 = st.columns([3, 2])
+    with g1:
+        st.altair_chart(
+            graphiques.graphique_entonnoir(graphiques.preparer_entonnoir(compte)),
+            width="stretch",
+        )
+    with g2:
+        echeances = graphiques.preparer_echeances(scraper.lister_marches())
+        st.caption("⏳ Prochaines échéances")
+        if echeances:
+            for e in echeances:
+                badge = f"🔴 J-{e['jours']}" if e["jours"] < 10 else f"🟢 J-{e['jours']}"
+                st.markdown(f"**{badge}** — {e['objet'][:55]}")
+                st.caption(f"{e['acheteur']} · limite {e['deadline']}")
+        else:
+            st.caption("Aucune deadline à venir.")
 
     # --- Statistiques ---
     conn = get_connection()
@@ -114,15 +125,38 @@ def page_dashboard() -> None:
                 """
             ).fetchall()
         )
+        toutes_factures = [
+            dict(l) for l in conn.execute("SELECT * FROM factures")
+        ]
     finally:
         conn.close()
+
+    g1, g2 = st.columns(2)
+    with g1:
+        donnees_ca = graphiques.preparer_ca_mensuel(toutes_factures)
+        st.caption("💶 CA facturé par mois (payé / dû)")
+        if donnees_ca:
+            st.altair_chart(
+                graphiques.graphique_ca_mensuel(donnees_ca), width="stretch"
+            )
+        else:
+            st.caption("Aucune facture datée.")
+    with g2:
+        donnees_prospects = graphiques.preparer_prospects_par_statut(
+            prospects.lister_prospects()
+        )
+        st.caption("👥 Prospects par étape du cycle")
+        st.altair_chart(
+            graphiques.graphique_prospects(donnees_prospects), width="stretch"
+        )
+
     if par_departement:
-        g1, g2 = st.columns(2)
-        with g1:
-            st.caption("Marchés par département")
+        g3, g4 = st.columns(2)
+        with g3:
+            st.caption("🗺️ Marchés par département")
             st.bar_chart(par_departement)
-        with g2:
-            st.caption("Détections par semaine")
+        with g4:
+            st.caption("📅 Détections par semaine")
             st.bar_chart(par_semaine)
 
     # --- Factures (saisie manuelle) ---
