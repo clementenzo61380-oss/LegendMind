@@ -244,6 +244,28 @@ def sauvegarder_memoire(
         conn.close()
 
 
+def mettre_a_jour_memoire(memoire_id: int, contenu_md: str) -> None:
+    """Sauvegarde le contenu édité d'un mémoire existant."""
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE memoires SET contenu_md = ? WHERE id = ?", (contenu_md, memoire_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def supprimer_memoire(memoire_id: int) -> None:
+    """Supprime un mémoire de la base."""
+    conn = get_connection()
+    try:
+        conn.execute("DELETE FROM memoires WHERE id = ?", (memoire_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def lister_memoires() -> list[dict[str, Any]]:
     """Liste les mémoires enregistrés (le plus récent d'abord)."""
     conn = get_connection()

@@ -138,6 +138,29 @@ def relances_dues() -> list[dict[str, Any]]:
         conn.close()
 
 
+def exporter_csv() -> str:
+    """Exporte tous les prospects en CSV (pour téléchargement depuis l'UI)."""
+    colonnes = [
+        "entreprise",
+        "ville",
+        "email",
+        "telephone",
+        "prenom_contact",
+        "secteur",
+        "source",
+        "statut",
+        "date_contact",
+        "marche_idweb",
+        "notes",
+    ]
+    tampon = io.StringIO()
+    ecrivain = csv.DictWriter(tampon, fieldnames=colonnes, extrasaction="ignore")
+    ecrivain.writeheader()
+    for prospect in lister_prospects():
+        ecrivain.writerow({c: prospect.get(c) or "" for c in colonnes})
+    return tampon.getvalue()
+
+
 def importer_csv(contenu: str | bytes, marche_idweb: str | None = None) -> int:
     """Importe des prospects depuis un CSV (colonnes : entreprise, ville, email,
     telephone, prenom_contact, secteur, source). Seule 'entreprise' est obligatoire.

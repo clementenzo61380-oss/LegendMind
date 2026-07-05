@@ -93,6 +93,36 @@ def page_dashboard() -> None:
         colonne.metric(etape.capitalize(), compte.get(etape, 0))
     st.caption(" → ".join(ETAPES_PIPELINE))
 
+    # --- Statistiques ---
+    conn = get_connection()
+    try:
+        par_departement = dict(
+            conn.execute(
+                """
+                SELECT COALESCE(NULLIF(code_departement, ''), '?') AS dep, COUNT(*)
+                FROM marches GROUP BY dep ORDER BY 2 DESC LIMIT 12
+                """
+            ).fetchall()
+        )
+        par_semaine = dict(
+            conn.execute(
+                """
+                SELECT strftime('%Y-S%W', date_ajout) AS semaine, COUNT(*)
+                FROM marches GROUP BY semaine ORDER BY semaine
+                """
+            ).fetchall()
+        )
+    finally:
+        conn.close()
+    if par_departement:
+        g1, g2 = st.columns(2)
+        with g1:
+            st.caption("Marchés par département")
+            st.bar_chart(par_departement)
+        with g2:
+            st.caption("Détections par semaine")
+            st.bar_chart(par_semaine)
+
     # --- Factures (saisie manuelle) ---
     st.subheader("Factures")
     with st.form("form_facture", clear_on_submit=True):
@@ -215,7 +245,12 @@ def page_radar() -> None:
                 st.error(str(exc))
 
     st.subheader("Marchés détectés (tri par deadline croissante)")
-    filtre = st.selectbox("Filtrer par statut", ["(tous)"] + STATUTS_MARCHE)
+    col_filtre, col_action = st.columns([3, 1])
+    filtre = col_filtre.selectbox("Filtrer par statut", ["(tous)"] + STATUTS_MARCHE)
+    if col_action.button("👁️ Tout marquer vu"):
+        nb = scraper.marquer_tous_vus()
+        st.toast(f"{nb} marché(s) passé(s) en « vu ».")
+        st.rerun()
     marches = scraper.lister_marches(None if filtre == "(tous)" else filtre)
     if not marches:
         st.info("Aucun marché en base. Lancez un scan.")
@@ -240,6 +275,9 @@ def page_radar() -> None:
             )
             if statut != m["statut"]:
                 scraper.changer_statut_marche(m["idweb"], statut)
+                st.rerun()
+            if c2.button("🗑️ Supprimer", key=f"marche_del_{m['idweb']}"):
+                scraper.supprimer_marche(m["idweb"])
                 st.rerun()
 
 
@@ -302,6 +340,12 @@ def page_prospects() -> None:
     with onglet_vue:
         mode = st.radio("Affichage", ["Tableau", "Kanban"], horizontal=True)
         filtre = st.selectbox("Filtrer par statut", ["(tous)"] + STATUTS_PROSPECT)
+        st.download_button(
+            "⬇️ Exporter tous les prospects (CSV)",
+            prospects.exporter_csv(),
+            file_name=f"prospects_{date.today().isoformat()}.csv",
+            mime="text/csv",
+        )
         liste = prospects.lister_prospects(None if filtre == "(tous)" else filtre)
         if not liste:
             st.info("Aucun prospect.")
@@ -399,7 +443,20 @@ def page_emails() -> None:
 
         destinataire = (prospect or {}).get("email", "") or ""
         lien = emails.generer_mailto(destinataire, sujet, corps)
-        st.markdown(f"[📨 Ouvrir dans votre client mail (mailto)]({lien})")
+        c1, c2 = st.columns([2, 2])
+        c1.markdown(f"[📨 Ouvrir dans votre client mail (mailto)]({lien})")
+        # Action rapide : passe le prospect en 'contacté' (déclenche le suivi J+3)
+        if prospect and prospect["statut"] in ("à contacter", "contacté"):
+            libelle = (
+                "✅ Marquer contacté aujourd'hui"
+                if prospect["statut"] == "à contacter"
+                else "🔁 Marquer relancé aujourd'hui"
+            )
+            nouveau = "contacté" if prospect["statut"] == "à contacter" else "relancé"
+            if c2.button(libelle):
+                prospects.changer_statut_prospect(prospect["id"], nouveau)
+                st.toast(f"{prospect['entreprise']} → {nouveau}")
+                st.rerun()
         st.code(corps, language=None)  # bloc code Streamlit = bouton copier intégré
 
 
@@ -556,24 +613,49 @@ def page_memoire() -> None:
     st.subheader("4. Mémoires générés")
     for m in memoire.lister_memoires():
         with st.expander(f"{m['date_creation']} — {m['titre'] or 'sans titre'} ({m['statut']})"):
-            onglet_contenu, onglet_critique, onglet_export = st.tabs(
-                ["Contenu", "Critique IA", "Exporter"]
+            onglet_contenu, onglet_edition, onglet_critique, onglet_export = st.tabs(
+                ["Aperçu", "✏️ Éditer", "Critique IA", "Exporter"]
             )
             with onglet_contenu:
                 st.markdown(m["contenu_md"] or "")
+            with onglet_edition:
+                # Édition du markdown avant export : compléter les
+                # [DONNÉE CLIENT : ...] et ajuster le texte de l'IA.
+                nb_marqueurs = (m["contenu_md"] or "").count("[DONNÉE CLIENT")
+                if nb_marqueurs:
+                    st.warning(f"{nb_marqueurs} marqueur(s) [DONNÉE CLIENT : ...] à compléter.")
+                edite = st.text_area(
+                    "Contenu markdown", m["contenu_md"] or "",
+                    height=400, key=f"mem_edit_{m['id']}",
+                )
+                if st.button("💾 Sauvegarder les modifications", key=f"mem_save_{m['id']}"):
+                    memoire.mettre_a_jour_memoire(m["id"], edite)
+                    st.success("Modifications sauvegardées.")
+                    st.rerun()
             with onglet_critique:
                 st.markdown(m["critique"] or "(pas de critique)")
             with onglet_export:
                 nom = f"memoire_{m['id']}_{date.today().isoformat()}"
-                c1, c2, c3 = st.columns(3)
-                if c1.button("📄 Exporter en .md", key=f"md_{m['id']}"):
-                    chemin = memoire.exporter_md(m["contenu_md"], nom)
-                    st.success(f"Exporté : {chemin}")
-                if c2.button("📘 Exporter en .docx", key=f"docx_{m['id']}"):
+                c1, c2, c3, c4 = st.columns(4)
+                c1.download_button(
+                    "⬇️ Télécharger .md", m["contenu_md"] or "",
+                    file_name=f"{nom}.md", mime="text/markdown",
+                    key=f"dl_md_{m['id']}",
+                )
+                if c2.button("📘 Générer le .docx", key=f"docx_{m['id']}"):
                     chemin = memoire.exporter_docx(
                         m["contenu_md"], nom, marche=m["titre"] or ""
                     )
-                    st.success(f"Exporté : {chemin}")
+                    st.session_state[f"docx_pret_{m['id']}"] = str(chemin)
+                if st.session_state.get(f"docx_pret_{m['id']}"):
+                    chemin_docx = Path(st.session_state[f"docx_pret_{m['id']}"])
+                    if chemin_docx.exists():
+                        c2.download_button(
+                            "⬇️ Télécharger .docx", chemin_docx.read_bytes(),
+                            file_name=chemin_docx.name,
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            key=f"dl_docx_{m['id']}",
+                        )
                 nouveau_statut = c3.selectbox(
                     "Statut", ["en cours", "livré"],
                     index=0 if m["statut"] == "en cours" else 1,
@@ -589,6 +671,9 @@ def page_memoire() -> None:
                         conn.commit()
                     finally:
                         conn.close()
+                    st.rerun()
+                if c4.button("🗑️ Supprimer", key=f"mem_del_{m['id']}"):
+                    memoire.supprimer_memoire(m["id"])
                     st.rerun()
 
 

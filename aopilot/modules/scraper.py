@@ -207,6 +207,29 @@ def changer_statut_marche(idweb: str, statut: str) -> None:
         conn.close()
 
 
+def supprimer_marche(idweb: str) -> None:
+    """Supprime un marché (les prospects liés sont conservés, lien mis à NULL)."""
+    conn = get_connection()
+    try:
+        conn.execute("DELETE FROM marches WHERE idweb = ?", (idweb,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def marquer_tous_vus() -> int:
+    """Passe tous les marchés 'nouveau' en 'vu'. Retourne le nombre modifié."""
+    conn = get_connection()
+    try:
+        curseur = conn.execute(
+            "UPDATE marches SET statut = 'vu' WHERE statut = 'nouveau'"
+        )
+        conn.commit()
+        return curseur.rowcount
+    finally:
+        conn.close()
+
+
 def jours_restants(datelimite: str) -> int | None:
     """Nombre de jours avant la date limite de réponse (None si date invalide)."""
     if not datelimite:

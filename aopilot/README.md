@@ -21,11 +21,11 @@ L'application s'ouvre sur http://localhost:8501. Tout fonctionne hors ligne
 | Module | Page | Description |
 |---|---|---|
 | **Radar BOAMP** | 📡 | Scan de l'API open data BOAMP par mots-clés / départements / fenêtre de publication. Déduplication par `idweb`, tri par deadline, badge J-X rouge si < 10 jours, statuts (nouveau / vu / prospecté / gagné). |
-| **Prospects** | 👥 | Prospects liés aux marchés : saisie rapide, import CSV, vue tableau ou kanban, rappels de relance automatiques (J+3 après contact) affichés en haut de chaque page. |
-| **Emails** | ✉️ | 3 templates éditables (`templates/emails/`) avec fusion de variables `{objet}`, `{acheteur}`, `{deadline}`, `{jours_restants}`, `{prenom_contact}`, `{secteur}`. Bouton copier + lien `mailto:` prérempli. Pas d'envoi automatique. |
+| **Prospects** | 👥 | Prospects liés aux marchés : saisie rapide, import **et export** CSV, vue tableau ou kanban, rappels de relance automatiques (J+3 après contact) affichés en haut de chaque page. |
+| **Emails** | ✉️ | 3 templates éditables (`templates/emails/`) avec fusion de variables `{objet}`, `{acheteur}`, `{deadline}`, `{jours_restants}`, `{prenom_contact}`, `{secteur}`. Bouton copier + lien `mailto:` prérempli + action « marquer contacté/relancé » qui alimente le suivi J+3. Pas d'envoi automatique. |
 | **Analyse DCE** | 📑 | Upload de PDF (CCTP, RC, CCAP, avis), extraction texte (pypdf), analyse experte par l'API Anthropic (`claude-sonnet-4-6`). Découpage automatique des DCE volumineux. Sauvegarde en base, liée au marché. |
-| **Mémoire technique** | 📝 | Fiche entreprise réutilisable, génération section par section (un appel API par section) selon `templates/memoire_template.md`, règle absolue anti-invention (`[DONNÉE CLIENT : ...]`), passe critique automatique, export **.docx** (page de garde, sommaire, styles) et **.md**. Coût API estimé avant génération. |
-| **Dashboard** | 🎯 | KPI (marchés de la semaine, relances dues, mémoires en cours, CA facturé), pipeline visuel détecté → payé, saisie des factures. |
+| **Mémoire technique** | 📝 | Fiche entreprise réutilisable, génération section par section (un appel API par section) selon `templates/memoire_template.md`, règle absolue anti-invention (`[DONNÉE CLIENT : ...]`), **édition du mémoire dans l'UI** (compteur de marqueurs restants), passe critique automatique, téléchargement direct **.docx** (page de garde, sommaire, styles, tableaux) et **.md**. Coût API estimé avant génération. |
+| **Dashboard** | 🎯 | KPI (marchés de la semaine, relances dues, mémoires en cours, CA facturé), pipeline visuel détecté → payé, graphiques (par département, par semaine), saisie des factures. |
 
 ## Structure
 
