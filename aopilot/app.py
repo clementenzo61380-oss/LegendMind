@@ -12,7 +12,16 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from modules import commissions, dce, emails, graphiques, memoire, prospects, scraper
+from modules import (
+    commissions,
+    dce,
+    emails,
+    graphiques,
+    memoire,
+    prospection,
+    prospects,
+    scraper,
+)
 from modules.database import (
     STATUTS_MARCHE,
     STATUTS_PROSPECT,
@@ -417,9 +426,39 @@ def page_prospects() -> None:
         f"{m['objet'][:60]} ({m['idweb']})": m["idweb"] for m in marches
     }
 
-    onglet_saisie, onglet_import, onglet_vue = st.tabs(
-        ["➕ Saisie rapide", "📄 Import CSV", "📋 Tableau / Kanban"]
+    onglet_auto, onglet_saisie, onglet_import, onglet_vue = st.tabs(
+        ["🤖 Prospection auto", "➕ Saisie rapide", "📄 Import CSV", "📋 Tableau / Kanban"]
     )
+
+    with onglet_auto:
+        st.markdown(
+            "L'IA construit votre base à votre place : les entreprises du "
+            "secteur choisi sont trouvées dans **l'annuaire officiel des "
+            "entreprises** (gratuit) puis ajoutées en prospects « à contacter »."
+        )
+        c1, c2, c3 = st.columns(3)
+        secteur_auto = c1.selectbox("Secteur", list(prospection.SECTEURS_NAF))
+        dep_auto = c2.text_input("Département", value="35")
+        limite_auto = c3.slider("Nombre max", 5, 25, 15)
+        marche_auto = st.selectbox(
+            "Lier au marché (optionnel)", list(choix_marches), key="auto_marche"
+        )
+        if st.button("🤖 Trouver des prospects automatiquement", type="primary"):
+            try:
+                with st.spinner("Recherche dans l'annuaire des entreprises..."):
+                    nb = prospection.importer_prospects_auto(
+                        secteur_auto, dep_auto, limite_auto, choix_marches[marche_auto]
+                    )
+                if nb:
+                    st.success(
+                        f"{nb} prospect(s) ajouté(s). Utilisez ensuite le bouton "
+                        "« 🔎 Enrichir (IA) » sur chaque fiche pour trouver email "
+                        "et téléphone."
+                    )
+                else:
+                    st.info("Aucun nouveau prospect (déjà en base ou aucun résultat).")
+            except (prospection.ErreurAnnuaire, ValueError) as exc:
+                st.error(str(exc))
 
     with onglet_saisie:
         with st.form("form_prospect", clear_on_submit=True):
@@ -500,6 +539,22 @@ def _ligne_prospect(p: dict, prefixe: str) -> None:
         if c2.button("🗑️", key=f"{prefixe}_del_{p['id']}"):
             prospects.supprimer_prospect(p["id"])
             st.rerun()
+        # Coordonnées manquantes : l'IA les cherche sur le web (qq centimes)
+        if not p["email"]:
+            if st.button("🔎 Enrichir (IA)", key=f"{prefixe}_enr_{p['id']}",
+                         help="Recherche web des coordonnées publiques (~0,05 $)"):
+                try:
+                    with st.spinner(f"Recherche des coordonnées de {p['entreprise']}..."):
+                        trouve = prospection.enrichir_prospect(p)
+                    if trouve:
+                        st.toast(f"Trouvé : {', '.join(f'{k}={v}' for k, v in trouve.items())}")
+                    else:
+                        st.toast("Aucune coordonnée publique trouvée.")
+                    st.rerun()
+                except RuntimeError as exc:  # clé API absente
+                    st.error(str(exc))
+                except Exception as exc:
+                    st.error(f"Enrichissement impossible : {exc}")
 
 
 def _tableau_prospects(liste: list[dict]) -> None:
