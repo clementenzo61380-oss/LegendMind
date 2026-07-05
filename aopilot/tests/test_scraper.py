@@ -67,6 +67,13 @@ def test_construire_where_contient_filtres() -> None:
     assert 'code_departement IN ("35", "22")' in clause
 
 
+def test_construire_where_neutralise_les_guillemets() -> None:
+    """Un guillemet dans le mot-clé ne doit pas casser la syntaxe ODSQL."""
+    clause = construire_where('espaces "verts', ["35"], 7)
+    assert clause.startswith('"espaces  verts"')
+    assert clause.count('"') % 2 == 0  # guillemets équilibrés
+
+
 def test_construire_where_sans_departements() -> None:
     """Sans départements, pas de clause IN."""
     clause = construire_where("peinture", [], 7)

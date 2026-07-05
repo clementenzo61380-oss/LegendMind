@@ -47,6 +47,8 @@ def construire_where(mot_cle: str, departements: list[str], jours: int) -> str:
     de publication en jours.
     """
     date_min = (date.today() - timedelta(days=jours)).isoformat()
+    # Les guillemets casseraient la syntaxe ODSQL : on les neutralise
+    mot_cle = mot_cle.replace('"', " ").strip()
     clause = f'"{mot_cle}" AND dateparution >= date\'{date_min}\''
     if departements:
         deps = ", ".join(f'"{d.strip()}"' for d in departements if d.strip())

@@ -57,7 +57,8 @@ def estimer_tokens(texte: str) -> int:
 def estimer_cout_analyse(textes: dict[str, str]) -> float:
     """Estimation du coût API en dollars pour une analyse (input + ~4000 tokens de sortie)."""
     tokens_entree = sum(estimer_tokens(t) for t in textes.values())
-    tokens_sortie = 4000 * max(1, len(textes) if _doit_decouper(textes) else 1)
+    # En mode découpage : un appel par document + l'appel de synthèse
+    tokens_sortie = 4000 * (len(textes) + 1 if _doit_decouper(textes) else 1)
     return (
         tokens_entree * PRIX_INPUT_PAR_MTOK / 1_000_000
         + tokens_sortie * PRIX_OUTPUT_PAR_MTOK / 1_000_000

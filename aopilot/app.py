@@ -487,10 +487,12 @@ def page_emails() -> None:
         jours = scraper.jours_restants(marche["datelimitereponse"]) if marche else None
         variables = emails.variables_depuis_marche(marche, prospect, jours)
         texte = emails.fusionner(emails.charger_template(fichier), variables)
-        sujet, corps = emails.extraire_sujet_corps(texte)
+        sujet_defaut, corps_defaut = emails.extraire_sujet_corps(texte)
 
-        st.text_input("Sujet", sujet, key="email_sujet")
-        st.text_area("Corps de l'email (copiez-le)", corps, height=350, key="email_corps")
+        # Pas de key= : les champs se régénèrent quand la sélection change,
+        # et les valeurs retournées (éditées ou non) alimentent le mailto.
+        sujet = st.text_input("Sujet", sujet_defaut)
+        corps = st.text_area("Corps de l'email (modifiable)", corps_defaut, height=350)
         st.caption("💡 Les marqueurs [?variable?] signalent une donnée manquante.")
 
         destinataire = (prospect or {}).get("email", "") or ""
@@ -532,8 +534,15 @@ def page_dce() -> None:
     )
 
     if fichiers:
+        textes: dict[str, str] = {}
         with st.spinner("Extraction du texte des PDF..."):
-            textes = {f.name: dce.extraire_texte_pdf(f.read(), f.name) for f in fichiers}
+            for f in fichiers:
+                try:
+                    textes[f.name] = dce.extraire_texte_pdf(f.read(), f.name)
+                except Exception as exc:  # PDF corrompu ou chiffré
+                    st.error(f"Impossible de lire « {f.name} » : {exc}")
+        if not textes:
+            return
         total_cars = sum(len(t) for t in textes.values())
         st.info(
             f"{len(textes)} fichier(s), ~{total_cars:,} caractères "
@@ -638,6 +647,13 @@ def page_memoire() -> None:
     # --- Génération ---
     st.subheader("3. Génération")
     sections = memoire.charger_sections_template()
+    if not sections:
+        st.error(
+            "Le template templates/memoire_template.md ne contient aucune "
+            "section « ## Titre » : la génération produirait un mémoire vide. "
+            "Ajoutez au moins une section."
+        )
+        return
     cout = memoire.estimer_cout_memoire(fiche_existante, contexte_dce, len(sections))
     st.info(
         f"{len(sections)} sections à générer (un appel API par section + passe "

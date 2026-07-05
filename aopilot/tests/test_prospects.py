@@ -60,6 +60,17 @@ def test_import_csv_ignore_lignes_sans_entreprise() -> None:
     assert {p["entreprise"] for p in prospects.lister_prospects()} == {"Alpha", "Beta"}
 
 
+def test_import_csv_delimiteur_point_virgule() -> None:
+    """Excel français exporte en ';' : l'import doit le détecter tout seul."""
+    nb = prospects.importer_csv(
+        "entreprise;ville;email\nAlpha;Rennes;a@b.fr\nBeta;Vannes;b@c.fr\n"
+    )
+    assert nb == 2
+    liste = prospects.lister_prospects()
+    assert {p["entreprise"] for p in liste} == {"Alpha", "Beta"}
+    assert {p["ville"] for p in liste} == {"Rennes", "Vannes"}  # colonnes bien séparées
+
+
 def test_export_csv_reimportable() -> None:
     """L'export CSV se réimporte tel quel (aller-retour sans perte)."""
     prospects.ajouter_prospect("Alpha", ville="Rennes", email="a@b.fr", secteur="nettoyage")

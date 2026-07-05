@@ -167,7 +167,10 @@ def importer_csv(contenu: str | bytes, marche_idweb: str | None = None) -> int:
     Retourne le nombre de lignes importées."""
     if isinstance(contenu, bytes):
         contenu = contenu.decode("utf-8-sig")
-    lecteur = csv.DictReader(io.StringIO(contenu))
+    # Excel français exporte en ';' : détection du délimiteur sur l'en-tête
+    premiere_ligne = contenu.splitlines()[0] if contenu.strip() else ""
+    delimiteur = ";" if premiere_ligne.count(";") > premiere_ligne.count(",") else ","
+    lecteur = csv.DictReader(io.StringIO(contenu), delimiter=delimiteur)
     nb = 0
     for ligne in lecteur:
         # Normalise les clés (minuscules, sans espaces superflus)
