@@ -1,0 +1,48 @@
+{
+	"_aide": "Palette des Plaines de l'Aube : verts tendres, ciel bleu vif, aube rosée. Couleurs au format #RRGGBB. Modifie et relance le jeu pour voir le résultat.",
+
+	"sky_day_top": "#3f8fff",
+	"sky_day_horizon": "#bfe4ff",
+	"sky_sunset_horizon": "#ffb38a",
+	"sky_night_top": "#0b1033",
+	"sky_night_horizon": "#2a2f6b",
+	"sky_ground": "#7fae7a",
+	"sun_color": "#fff1cc",
+	"moon_color": "#d6e2ff",
+	"cloud_color": "#ffffff",
+	"cloud_shadow_color": "#c4cdf2",
+
+	"sun_light_day": "#fff4dd",
+	"sun_light_sunset": "#ffb27a",
+	"moon_light": "#8fa6ff",
+	"sun_energy": 1.25,
+	"moon_energy": 0.35,
+
+	"ambient_day": "#b9c8ff",
+	"ambient_night": "#2b3166",
+	"ambient_energy_day": 0.55,
+	"ambient_energy_night": 0.35,
+	"shadow_tint": "#6b5ca0",
+
+	"fog_day": "#cfe6ff",
+	"fog_night": "#1c2150",
+	"fog_density": 0.004,
+
+	"ground": "#7cc95a",
+	"ground_dark": "#5aa847",
+	"grass_tuft": "#9be070",
+	"tree_trunk": "#8a5a3c",
+	"tree_leaves": "#58c26a",
+	"tree_leaves_alt": "#8fdc5c",
+	"pine_leaves": "#2f9e6e",
+	"rock": "#b8b2c8",
+	"rock_dark": "#8e88a6",
+	"stone_wall": "#d8cbb0",
+	"wood_plank": "#c98d54",
+	"water": "#4fc3f7",
+	"flower_a": "#ff7aa8",
+	"flower_b": "#ffe066",
+	"crystal": "#7af0ff",
+	"crystal_glow": "#4ad8ff",
+	"shrine_glow": "#ffd36b"
+}

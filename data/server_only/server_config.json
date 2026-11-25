@@ -1,0 +1,6 @@
+{
+	"_aide": "Configuration du serveur. Ce dossier (data/server_only) n'est JAMAIS livré au joueur : c'est ici qu'iront les secrets (cachettes et conditions des monstres uniques, scénarios uniques…).",
+	"port": 24800,
+	"tick_rate": 30,
+	"max_players": 64
+}

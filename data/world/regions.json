@@ -1,0 +1,27 @@
+{
+	"_aide": "Liste des régions du monde. Les niveaux sont seulement conseillés (affichés sur la carte). 'scene' = scène chargée côté joueur. Ne mettre ici AUCUN secret : ce fichier est livré au joueur.",
+	"start_region": "plains_dawn",
+	"regions": [
+		{
+			"id": "plains_dawn",
+			"name_key": "REGION_PLAINS_DAWN",
+			"recommended_levels": [1, 30],
+			"pvp_protected": true,
+			"scene": "res://world/regions/plains_dawn/test_zone.tscn"
+		},
+		{
+			"id": "dark_forest",
+			"name_key": "REGION_DARK_FOREST",
+			"recommended_levels": [30, 60],
+			"pvp_protected": false,
+			"scene": ""
+		},
+		{
+			"id": "magma_lands",
+			"name_key": "REGION_MAGMA_LANDS",
+			"recommended_levels": [60, 99],
+			"pvp_protected": false,
+			"scene": ""
+		}
+	]
+}

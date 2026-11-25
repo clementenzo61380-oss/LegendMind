@@ -1,0 +1,8 @@
+{
+	"_aide": "Réglages du cycle jour/nuit. Plus tard, c'est le serveur qui donnera l'heure à tous les joueurs (tout le monde voit la même nuit).",
+	"day_length_minutes": 24,
+	"start_hour": 9.0,
+	"night_start_hour": 20.0,
+	"night_end_hour": 6.0,
+	"debug_fast_multiplier": 60
+}

@@ -1,0 +1,13 @@
+keys,fr,en
+REGION_PLAINS_DAWN,Plaines de l'Aube,Dawn Plains
+REGION_DARK_FOREST,Forêt Sombre,Dark Forest
+REGION_MAGMA_LANDS,Terres de Magma,Magma Lands
+HUD_DAY,jour,day
+HUD_NIGHT,nuit,night
+HUD_HELP,"ZQSD : se déplacer   Souris : regarder
+Espace / Ctrl : monter / descendre   Maj : aller vite
+T : accélérer le temps   N : avancer de 3 heures
+Échap : libérer la souris   F1 : cacher l'aide","WASD: move   Mouse: look
+Space / Ctrl: up / down   Shift: go fast
+T: speed up time   N: skip 3 hours
+Esc: release mouse   F1: hide help"
