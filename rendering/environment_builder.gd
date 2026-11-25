@@ -33,9 +33,9 @@ static func build(palette: Dictionary) -> Environment:
 	# Bloom : seules les choses très lumineuses (soleil, cristaux, sorts) brillent.
 	env.glow_enabled = true
 	env.glow_normalized = false
-	env.glow_intensity = 0.9
+	env.glow_intensity = 0.6
 	env.glow_strength = 1.0
-	env.glow_bloom = 0.05
+	env.glow_bloom = 0.0
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
 	env.glow_hdr_threshold = 1.0
 	env.glow_hdr_scale = 2.0

@@ -9,7 +9,7 @@ config/name="Éclats d'Éther"
 config/description="RPG d'action en ligne en 3D, style anime fantasy."
 config/version="0.1.0"
 run/main_scene="res://core/boot.tscn"
-config/features=PackedStringArray("4.5", "Forward Plus")
+config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
 [display]

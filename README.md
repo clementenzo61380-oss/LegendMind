@@ -3,7 +3,7 @@
 RPG d'action en ligne en 3D (futur MMORPG), style anime fantasy, fait avec **Godot 4**.
 
 ## Lancer le jeu
-1. Ouvre Godot 4 (version 4.5 ou plus récente, version standard, pas « .NET »).
+1. Ouvre Godot 4 (version 4.7, version standard, pas « .NET »).
 2. **Importer** → choisis le fichier `project.godot` de ce dossier.
 3. Appuie sur **F5** (ou le bouton ▶ en haut à droite).
 

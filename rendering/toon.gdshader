@@ -62,22 +62,22 @@ void light() {
 		level = 0.5 * band_step(threshold_shadow, received) + 0.5 * band_step(threshold_mid, received);
 	}
 
-	DIFFUSE_LIGHT += LIGHT_COLOR * PI * level;
+	DIFFUSE_LIGHT += LIGHT_COLOR / PI * level;
 
 	// Teinte colorée dans l'ombre, seulement pour le soleil/la lune
 	// (sinon chaque petite lampe ajouterait sa teinte).
 	if (LIGHT_IS_DIRECTIONAL) {
-		DIFFUSE_LIGHT += LIGHT_COLOR * PI * shadow_tint.rgb * shadow_tint_strength * (1.0 - level);
+		DIFFUSE_LIGHT += LIGHT_COLOR / PI * shadow_tint.rgb * shadow_tint_strength * (1.0 - level);
 	}
 
 	// Petit reflet brillant, lui aussi tranché.
 	vec3 half_vector = normalize(LIGHT + VIEW);
 	float spec = pow(clamp(dot(NORMAL, half_vector), 0.0, 1.0), 64.0);
 	float spec_band = step(1.0 - specular_size * 0.2, spec) * level;
-	SPECULAR_LIGHT += LIGHT_COLOR * PI * spec_band * specular_strength;
+	SPECULAR_LIGHT += LIGHT_COLOR / PI * spec_band * specular_strength;
 
 	// Liseré lumineux sur le bord des formes, côté éclairé.
 	float fresnel = 1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0);
 	float rim = band_step(1.0 - rim_width, fresnel) * level;
-	SPECULAR_LIGHT += rim_color.rgb * LIGHT_COLOR * PI * rim * rim_strength;
+	SPECULAR_LIGHT += rim_color.rgb * LIGHT_COLOR / PI * rim * rim_strength;
 }

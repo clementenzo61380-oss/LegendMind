@@ -25,7 +25,7 @@ sun = NodePath("../Sun")
 script = ExtResource("3_builder")
 
 [node name="FreeCamera" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.966, 0.259, 0, -0.259, 0.966, 0, 4, 16)
+transform = Transform3D(1, 0, 0, 0, 0.978, -0.208, 0, 0.208, 0.978, 0, 6, 24)
 fov = 70.0
 far = 800.0
 script = ExtResource("4_camera")

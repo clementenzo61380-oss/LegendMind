@@ -24,7 +24,7 @@ Règle de création : aucun nom, personnage, lieu ou design repris d'une œuvre 
 - Toutes les valeurs de réglage dans `data/` (JSON), jamais en dur dans le code.
 
 ## Choix techniques
-- **Godot 4** (4.5+), **GDScript**, rendu Forward+.
+- **Godot 4.7** (version utilisée par le porteur du projet), **GDScript**, rendu Forward+.
 - Multijoueur intégré de Godot, **serveur qui fait foi** (les joueurs n'envoient que leurs actions).
 - Même projet lancé en **client** ou en **serveur dédié** (`core/boot.gd`).
 - **Secrets côté serveur uniquement** : `server/` et `data/server_only/` sont exclus des builds joueur
@@ -72,8 +72,9 @@ tests/       vérifications automatiques (sans fenêtre)
 - [~] **Étape 1 — Base du projet** (codée, en attente du test visuel par le porteur du projet) : structure, shader toon + contour, environnement (bloom, brouillard,
   ciel, jour/nuit), zone de test des Plaines de l'Aube (formes simples, parcours d'acrobaties prévu
   pour l'étape 2), mode serveur dédié, traductions, tests automatiques.
-  - Note : l'environnement de développement de Claude n'a pas pu télécharger Godot (réseau bloqué),
-    le projet n'a pas encore été ouvert dans Godot : premier test à faire par le porteur du projet.
+  - Premier test (Godot 4.7) : le projet se lance sans erreur, ciel et nuages OK, mais tout était
+    surexposé (éclairage du shader toon ×π² trop fort) → corrigé : LIGHT_COLOR / PI, comme Godot.
+  - Leçon : dans light(), LIGHT_COLOR contient déjà le facteur π ; toujours diviser par PI.
 - [ ] Étape 2 — Combat solo
 - [ ] Étapes 3 à 10 (voir cahier des charges)
 

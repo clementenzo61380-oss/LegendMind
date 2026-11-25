@@ -246,8 +246,8 @@ func _build_shrine() -> void:
 	orb_mi.name = "ShrineOrb"
 	var light := OmniLight3D.new()
 	light.light_color = _c("shrine_glow")
-	light.light_energy = 2.0
-	light.omni_range = 9.0
+	light.light_energy = 0.8
+	light.omni_range = 7.0
 	light.position = Vector3(0, 2.2, 0)
 	add_child(light)
 
