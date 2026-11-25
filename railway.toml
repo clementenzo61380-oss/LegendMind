@@ -1,6 +1,0 @@
-# Railway — build depuis le Dockerfile à la racine du service (ou Root Directory).
-# https://docs.railway.app/deploy/dockerfiles
-
-[build]
-builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"

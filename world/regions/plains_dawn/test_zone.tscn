@@ -1,0 +1,56 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://world/regions/region_client.gd" id="1_region"]
+[ext_resource type="Script" path="res://core/day_night.gd" id="2_daynight"]
+[ext_resource type="Script" path="res://world/regions/plains_dawn/test_zone_builder.gd" id="3_builder"]
+[ext_resource type="Script" path="res://client/free_camera.gd" id="4_camera"]
+
+[node name="PlainsDawnTestZone" type="Node3D"]
+script = ExtResource("1_region")
+region_id = "plains_dawn"
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.5, 0.866, 0, -0.866, 0.5, 0, 20, 0)
+shadow_enabled = true
+shadow_blur = 0.3
+directional_shadow_max_distance = 120.0
+
+[node name="DayNight" type="Node" parent="." node_paths=PackedStringArray("sun")]
+script = ExtResource("2_daynight")
+sun = NodePath("../Sun")
+
+[node name="Zone" type="Node3D" parent="."]
+script = ExtResource("3_builder")
+
+[node name="FreeCamera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.966, 0.259, 0, -0.259, 0.966, 0, 4, 16)
+fov = 70.0
+far = 800.0
+script = ExtResource("4_camera")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Info" type="Label" parent="HUD"]
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 600.0
+offset_bottom = 70.0
+theme_override_colors/font_outline_color = Color(0.06, 0.04, 0.1, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 18
+
+[node name="Help" type="Label" parent="HUD"]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -190.0
+offset_right = 600.0
+offset_bottom = -12.0
+grow_vertical = 0
+vertical_alignment = 2
+theme_override_colors/font_outline_color = Color(0.06, 0.04, 0.1, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 15
